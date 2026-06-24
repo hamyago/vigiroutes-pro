@@ -1,4 +1,4 @@
-﻿name: Build VigiRoutes Pro APK
+name: Build VigiRoutes Pro APK
 
 on:
   push:
@@ -46,14 +46,9 @@ jobs:
       - name: Build APK Release
         run: flutter build apk --release || true
 
-      - name: Find APK
-        run: find . -name "*.apk" -not -path "*/cache/*" 2>/dev/null
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: vigiroutes-pro-${{ github.run_number }}
-          path: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/apk/**/*.apk
-          if-no-files-found: warn
+          path: android/app/build/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
