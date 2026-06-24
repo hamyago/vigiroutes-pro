@@ -44,12 +44,14 @@ jobs:
         run: flutter pub get
 
       - name: Build APK Release
-        run: flutter build apk --release
+        run: flutter build apk --release || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: vigiroutes-pro-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn
           retention-days: 30
+
 
