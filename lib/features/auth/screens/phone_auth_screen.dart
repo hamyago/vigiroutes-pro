@@ -1,0 +1,228 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../controllers/auth_controller.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/custom_button.dart';
+
+class PhoneAuthScreen extends StatefulWidget {
+  final bool isProvider;
+  const PhoneAuthScreen({super.key, this.isProvider = false});
+
+  @override
+  State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
+}
+
+class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
+  final _controller = TextEditingController();
+  String _phoneNumber = '';
+  bool   _valid       = false;
+
+  // Construit le numéro au format E.164 pour Firebase
+  // Numéros CI : toujours 10 chiffres avec le 0 initial
+  // Ex: 0747457878 → +2250747457878
+  String _buildE164(String input) {
+    final digits = input.replaceAll(RegExp(r'\D'), '');
+    // Si déjà 10 chiffres commençant par 0 → format correct
+    if (digits.length == 10 && digits.startsWith('0')) {
+      return '+225$digits';
+    }
+    // Si 9 chiffres sans le 0 → ajouter le 0
+    if (digits.length == 9 && !digits.startsWith('0')) {
+      return '+2250$digits';
+    }
+    return '+225$digits';
+  }
+
+  bool _isValid(String input) {
+    final digits = input.replaceAll(RegExp(r'\D'), '');
+    // Accepter 10 chiffres avec 0 initial OU 9 chiffres sans le 0
+    return (digits.length == 10 && digits.startsWith('0')) ||
+           (digits.length == 9 && !digits.startsWith('0'));
+  }
+
+  Future<void> _handleSendOtp(AuthController auth) async {
+    await auth.sendOtp(_phoneNumber);
+    if (!mounted) return;
+    if (auth.otpSent && auth.error == null) {
+      context.go(
+        '/auth/otp',
+        extra: {
+          'phone':      _phoneNumber,
+          'isProvider': widget.isProvider,
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => context.go('/onboarding'),
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Center(
+                  child: Icon(Icons.phone_android, size: 28,
+                      color: AppColors.primary),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Votre numéro',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.isProvider
+                    ? 'Entrez le numéro de votre compte prestataire.'
+                    : 'Entrez votre numéro de téléphone pour continuer.',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Champ numéro — indicatif +225 fixe
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _valid ? AppColors.primary : Colors.grey,
+                      width: _valid ? 2 : 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 16),
+                      child: const Row(
+                        children: [
+                          Text('🇨🇮', style: TextStyle(fontSize: 20)),
+                          SizedBox(width: 8),
+                          Text(
+                            '+225',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, height: 30, color: Colors.grey[300]),
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10),
+                        ],
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          // Hint avec le 0 pour guider l'utilisateur
+                          hintText: '0747457878',
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 16),
+                        ),
+                        style: const TextStyle(fontSize: 18, letterSpacing: 1),
+                        onChanged: (value) {
+                          setState(() {
+                            _valid = _isValid(value);
+                            if (_valid) {
+                              _phoneNumber = _buildE164(value);
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _valid
+                    ? 'Numéro Firebase : $_phoneNumber'
+                    : 'Saisissez 10 chiffres en commençant par 0',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _valid ? AppColors.primary : AppColors.textMuted,
+                ),
+              ),
+
+              if (auth.error != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline,
+                          color: AppColors.error, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          auth.error!,
+                          style: const TextStyle(
+                              color: AppColors.error, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const Spacer(),
+              AppButton(
+                label: 'Recevoir le code',
+                isLoading: auth.isLoading,
+                enabled: _valid && !auth.isLoading,
+                onPressed: () => _handleSendOtp(auth),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(
+                  'Un code à 6 chiffres sera envoyé par SMS.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

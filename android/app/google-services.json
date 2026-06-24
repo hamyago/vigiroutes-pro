@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "603913934385",
+    "project_id": "vigiroutes",
+    "storage_bucket": "vigiroutes.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:603913934385:android:9b1b5c2778c7e114836710",
+        "android_client_info": {
+          "package_name": "ci.oyopmt.vigiroutes.client"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAxzvDBgb8tGMFmYcurMhGZZ_qourHmoc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "603913934385-2v0me1uhn6a871l4ehv96jpc8fccaogr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "ci.oyopmt.vigiroutes.provider"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:603913934385:android:638b4e633292ede2836710",
+        "android_client_info": {
+          "package_name": "ci.oyopmt.vigiroutes.provider"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAxzvDBgb8tGMFmYcurMhGZZ_qourHmoc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "603913934385-2v0me1uhn6a871l4ehv96jpc8fccaogr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "ci.oyopmt.vigiroutes.provider"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
