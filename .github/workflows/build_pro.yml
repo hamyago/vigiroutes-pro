@@ -31,7 +31,7 @@ jobs:
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/vigiroutes-release.jks
 
       - name: Create key.properties
         run: |
@@ -57,3 +57,4 @@ jobs:
             build/app/outputs/flutter-apk/*.apk
             build/app/outputs/apk/**/*.apk
           if-no-files-found: warn
+
