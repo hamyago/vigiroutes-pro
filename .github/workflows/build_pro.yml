@@ -1,4 +1,4 @@
-name: Build VigiRoutes Pro APK
+﻿name: Build VigiRoutes Pro APK
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
           echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=vigiroutes" >> android/key.properties
-          echo "storeFile=vigiroutes-release.jks" >> android/key.properties
+          echo "storeFile=app/vigiroutes-release.jks" >> android/key.properties
 
       - name: Flutter pub get
         run: flutter pub get
@@ -46,12 +46,14 @@ jobs:
       - name: Build APK Release
         run: flutter build apk --release || true
 
+      - name: Find APK
+        run: find . -name "*.apk" -not -path "*/cache/*" 2>/dev/null
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: vigiroutes-pro-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/*.apk
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/apk/**/*.apk
           if-no-files-found: warn
-          retention-days: 30
-
-
