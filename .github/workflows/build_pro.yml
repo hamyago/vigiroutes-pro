@@ -1,4 +1,4 @@
-name: Build VigiRoutes Pro APK
+﻿name: Build VigiRoutes Pro APK
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -16,30 +17,31 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: temurin
           java-version: '21'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.1'
-          channel: 'stable'
+          channel: stable
+          cache: true
 
-      - name: Get dependencies
-        run: flutter pub get
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
 
       - name: Create key.properties
         run: |
-          cat > android/key.properties << EOF
-          storePassword=${{ secrets.STORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=vigiroutes
-          storeFile=../app/vigiroutes-release.jks
-          EOF
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=vigiroutes" >> android/key.properties
+          echo "storeFile=app/vigiroutes-release.jks" >> android/key.properties
+
+      - name: Flutter pub get
+        run: flutter pub get
 
       - name: Build APK Release
         run: flutter build apk --release
@@ -47,6 +49,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: vigiroutes-pro-release
+          name: vigiroutes-pro-${{ github.run_number }}
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
