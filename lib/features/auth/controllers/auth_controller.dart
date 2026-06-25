@@ -129,7 +129,7 @@ class AuthController extends ChangeNotifier {
     double? longitude,
   }) async {
     try {
-      final idToken  = await firebaseUser.getIdToken(true);
+      final idToken  = await firebaseUser.getIdToken(false);
       final fcmToken = await FirebaseMessaging.instance.getToken();
 
       final response = await _api.loginProvider(
