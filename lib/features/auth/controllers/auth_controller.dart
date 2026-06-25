@@ -58,6 +58,7 @@ class AuthController extends ChangeNotifier {
       await _firebaseAuth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: const Duration(seconds: 60),
+        androidSmsRetrieverSupported: false,
         verificationCompleted: (credential) async {
           debugPrint('[ProviderAuth] verificationCompleted — auto sign-in');
           await _signIn(credential);
