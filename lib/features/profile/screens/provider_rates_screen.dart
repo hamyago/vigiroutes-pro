@@ -51,9 +51,9 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
       for (final rate in rates) {
         final id = rate['service_type_id'] as String;
         _basePriceControllers[id] = TextEditingController(
-            text: (rate['base_price'] as num).toInt().toString());
+            text: double.parse(rate['base_price'].toString()).toInt().toString());
         _pricePerKmControllers[id] = TextEditingController(
-            text: (rate['price_per_km'] as num).toInt().toString());
+            text: double.parse(rate['price_per_km'].toString()).toInt().toString());
       }
     } catch (e) {
       setState(() {
@@ -221,8 +221,8 @@ class _ServiceRateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final minBase  = (rate['min_base_price']   as num).toInt();
-    final minPerKm = (rate['min_price_per_km'] as num).toInt();
+    final minBase  = double.parse(rate['min_base_price'].toString()).toInt();
+    final minPerKm = double.parse(rate['min_price_per_km'].toString()).toInt();
     final hasCustom = rate['has_custom_rate'] as bool? ?? false;
 
     return Container(
