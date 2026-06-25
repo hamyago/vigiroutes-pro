@@ -3,9 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/models/service_type_model.dart';
 import '../../../core/services/location_service.dart';
-import '../../../core/services/service_type_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -22,23 +20,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _formKey   = GlobalKey<FormState>();
   final _locationService = LocationService();
 
-  final List<String> _selectedServices = [];
-  bool   _loadingLocation = false;
-  bool   _loadingServices = false;
+  String? _selectedSector;
+  bool _loadingLocation = false;
   double? _lat, _lng;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadServices();
-  }
-
-  Future<void> _loadServices() async {
-    if (ServiceTypeService.instance.isLoaded) return;
-    setState(() => _loadingServices = true);
-    await ServiceTypeService.instance.load();
-    if (mounted) setState(() => _loadingServices = false);
-  }
+  static const _sectors = [
+    {'value': 'mecanicien',       'label': '🔧 Mécanicien'},
+    {'value': 'electricien_auto', 'label': '⚡ Électricien Auto'},
+    {'value': 'vulcanisateur',    'label': '🔩 Vulcanisateur'},
+    {'value': 'remorqueur',       'label': '🚛 Remorqueur'},
+  ];
 
   @override
   void dispose() {
@@ -61,77 +52,51 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthController>();
 
-    if (widget.isProvider) {
-      if (_selectedServices.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sélectionnez au moins un type de service.')),
-        );
-        return;
-      }
-      if (_lat == null) {
-        await _getLocation();
-        if (_lat == null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('La localisation est requise.')),
-          );
-          return;
-        }
-      }
-
-      await auth.completeProviderProfile(
-        name:         _nameCtrl.text.trim(),
-        phone:        _phoneCtrl.text.trim(),
-        sector:       'general',
-        serviceTypes: _selectedServices,
-        latitude:     _lat!,
-        longitude:    _lng!,
+    if (_selectedSector == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionnez votre secteur d\'activité.')),
       );
-
-      if (!mounted) return;
-
-      // Vérifier si la connexion a réussi
-      if (auth.error != null) {
+      return;
+    }
+    if (_lat == null) {
+      await _getLocation();
+      if (_lat == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(auth.error!),
-            backgroundColor: AppColors.error,
-          ),
+          const SnackBar(content: Text('La localisation est requise.')),
         );
         return;
       }
+    }
 
-      if (auth.state == AuthState.authenticated) {
-        context.go('/provider/home');
-      }
+    await auth.completeProviderProfile(
+      name:         _nameCtrl.text.trim(),
+      phone:        _phoneCtrl.text.trim(),
+      sector:       _selectedSector!,
+      serviceTypes: [],
+      latitude:     _lat!,
+      longitude:    _lng!,
+    );
 
-    } else {
-      await auth.completeUserProfile(
-        name:  _nameCtrl.text.trim(),
-        phone: _phoneCtrl.text.trim(),
+    if (!mounted) return;
+
+    if (auth.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.error!),
+          backgroundColor: AppColors.error,
+        ),
       );
+      return;
+    }
 
-      if (!mounted) return;
-
-      if (auth.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(auth.error!),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
-
-      if (auth.state == AuthState.authenticated) {
-        context.go('/user/home');
-      }
+    if (auth.state == AuthState.authenticated) {
+      context.go('/provider/home');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth     = context.watch<AuthController>();
-    final services = ServiceTypeService.instance.serviceTypes;
+    final auth = context.watch<AuthController>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Créer mon profil')),
@@ -163,8 +128,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     labelText: 'Nom complet',
                     prefixIcon: Icon(Icons.person_outline),
                   ),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Champ requis' : null,
+                  validator: (v) => v == null || v.isEmpty ? 'Champ requis' : null,
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 16),
@@ -177,91 +141,84 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                   keyboardType: TextInputType.phone,
                 ),
-                if (widget.isProvider) ...[
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Types de services proposés',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_loadingServices)
-                    const Center(child: CircularProgressIndicator())
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: services
-                          .map((s) => _ServiceChip(
-                                service:  s,
-                                selected: _selectedServices.contains(s.id),
-                                onTap: () {
-                                  setState(() {
-                                    if (_selectedServices.contains(s.id)) {
-                                      _selectedServices.remove(s.id);
-                                    } else {
-                                      _selectedServices.add(s.id);
-                                    }
-                                  });
-                                },
-                              ))
-                          .toList(),
-                    ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Votre localisation',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  ),
-                  const SizedBox(height: 12),
-                  InkWell(
-                    onTap: _getLocation,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _lat != null
-                            ? AppColors.successLight
-                            : AppColors.surfaceVariant,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _lat != null
-                              ? AppColors.success : AppColors.border,
+                const SizedBox(height: 24),
+                const Text(
+                  'Secteur d\'activité',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _sectors.map((s) {
+                    final selected = _selectedSector == s['value'];
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedSector = s['value']),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: selected ? AppColors.primary : AppColors.surfaceVariant,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: selected ? AppColors.primary : AppColors.border,
+                          ),
+                        ),
+                        child: Text(
+                          s['label']!,
+                          style: TextStyle(
+                            color: selected ? Colors.white : AppColors.textPrimary,
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                          ),
                         ),
                       ),
-                      child: Row(children: [
-                        Icon(
-                          _lat != null
-                              ? Icons.check_circle
-                              : Icons.location_on_outlined,
-                          color: _lat != null
-                              ? AppColors.success : AppColors.primary,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _loadingLocation
-                              ? 'Localisation en cours...'
-                              : _lat != null
-                                  ? 'Position enregistrée ✓'
-                                  : 'Appuyez pour détecter ma position',
-                          style: TextStyle(
-                            color: _lat != null
-                                ? AppColors.success
-                                : AppColors.textSecondary,
-                          ),
-                        ),
-                        if (_loadingLocation) ...[
-                          const Spacer(),
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ],
-                      ]),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Votre localisation',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: _getLocation,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _lat != null ? AppColors.successLight : AppColors.surfaceVariant,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _lat != null ? AppColors.success : AppColors.border,
+                      ),
                     ),
+                    child: Row(children: [
+                      Icon(
+                        _lat != null ? Icons.check_circle : Icons.location_on_outlined,
+                        color: _lat != null ? AppColors.success : AppColors.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _loadingLocation
+                            ? 'Localisation en cours...'
+                            : _lat != null
+                                ? 'Position enregistrée ✓'
+                                : 'Appuyez pour détecter ma position',
+                        style: TextStyle(
+                          color: _lat != null ? AppColors.success : AppColors.textSecondary,
+                        ),
+                      ),
+                      if (_loadingLocation) ...[
+                        const Spacer(),
+                        const SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ],
+                    ]),
                   ),
-                ],
-
-                // Affichage erreur API
+                ),
                 if (auth.error != null) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -282,7 +239,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ]),
                   ),
                 ],
-
                 const SizedBox(height: 40),
                 AppButton(
                   label: 'Créer mon compte',
@@ -297,46 +253,4 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ),
     );
   }
-}
-
-class _ServiceChip extends StatelessWidget {
-  final ServiceTypeModel service;
-  final bool selected;
-  final VoidCallback onTap;
-  const _ServiceChip({
-    required this.service,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary : AppColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.border,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(service.emoji),
-              const SizedBox(width: 6),
-              Text(
-                service.name,
-                style: TextStyle(
-                  color: selected ? Colors.white : AppColors.textPrimary,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
 }
