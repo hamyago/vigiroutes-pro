@@ -57,7 +57,7 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
       }
     } catch (e) {
       setState(() {
-        _error     = 'Impossible de charger vos tarifs';
+        _error = 'Erreur: \';
         _isLoading = false;
       });
     }
