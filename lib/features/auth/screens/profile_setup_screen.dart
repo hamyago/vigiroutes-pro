@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
@@ -57,6 +57,77 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     });
   }
 
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final auth = context.read<AuthController>();
+
+    if (widget.isProvider) {
+      if (_selectedServices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sélectionnez au moins un type de service.')),
+        );
+        return;
+      }
+      if (_lat == null) {
+        await _getLocation();
+        if (_lat == null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('La localisation est requise.')),
+          );
+          return;
+        }
+      }
+
+      await auth.completeProviderProfile(
+        name:         _nameCtrl.text.trim(),
+        phone:        _phoneCtrl.text.trim(),
+        sector:       'general',
+        serviceTypes: _selectedServices,
+        latitude:     _lat!,
+        longitude:    _lng!,
+      );
+
+      if (!mounted) return;
+
+      // Vérifier si la connexion a réussi
+      if (auth.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(auth.error!),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      if (auth.state == AuthState.authenticated) {
+        context.go('/provider/home');
+      }
+
+    } else {
+      await auth.completeUserProfile(
+        name:  _nameCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      if (auth.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(auth.error!),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      if (auth.state == AuthState.authenticated) {
+        context.go('/user/home');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth     = context.watch<AuthController>();
@@ -110,8 +181,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   const SizedBox(height: 24),
                   const Text(
                     'Types de services proposés',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 15),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                   const SizedBox(height: 12),
                   if (_loadingServices)
@@ -139,8 +209,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   const SizedBox(height: 24),
                   const Text(
                     'Votre localisation',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 15),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                   const SizedBox(height: 12),
                   InkWell(
@@ -184,56 +253,42 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ],
                       ]),
                     ),
                   ),
                 ],
+
+                // Affichage erreur API
+                if (auth.error != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          auth.error!,
+                          style: const TextStyle(color: AppColors.error, fontSize: 13),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+
                 const SizedBox(height: 40),
                 AppButton(
                   label: 'Créer mon compte',
                   isLoading: auth.isLoading,
-                  enabled: true,
-                  onPressed: () async {
-                    if (!_formKey.currentState!.validate()) return;
-                    if (widget.isProvider) {
-                      if (_selectedServices.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text(
-                              'Sélectionnez au moins un type de service.')),
-                        );
-                        return;
-                      }
-                      if (_lat == null) {
-                        await _getLocation();
-                        if (_lat == null && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text(
-                                'La localisation est requise.')),
-                          );
-                          return;
-                        }
-                      }
-                      await auth.completeProviderProfile(
-                        name:         _nameCtrl.text.trim(),
-                        phone:        _phoneCtrl.text.trim(),
-                        sector: 'general',
-                        serviceTypes: _selectedServices,
-                        latitude:     _lat!,
-                        longitude:    _lng!,
-                      );
-                      if (mounted) context.go('/provider/home');
-                    } else {
-                      await auth.completeUserProfile(
-                        name:  _nameCtrl.text.trim(),
-                        phone: _phoneCtrl.text.trim(),
-                      );
-                      if (mounted) context.go('/user/home');
-                    }
-                  },
+                  enabled: !auth.isLoading,
+                  onPressed: _submit,
                 ),
               ],
             ),
@@ -276,8 +331,7 @@ class _ServiceChip extends StatelessWidget {
                 service.name,
                 style: TextStyle(
                   color: selected ? Colors.white : AppColors.textPrimary,
-                  fontWeight:
-                      selected ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                   fontSize: 13,
                 ),
               ),
@@ -286,4 +340,3 @@ class _ServiceChip extends StatelessWidget {
         ),
       );
 }
-
