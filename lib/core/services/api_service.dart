@@ -1,4 +1,5 @@
 ﻿import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,23 +26,45 @@ class ApiService {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-  final prefs = await SharedPreferences.getInstance();
-  // Routes provider → token Firebase
-  // Routes autres → token Sanctum
-  String? token;
-  if (options.path.startsWith('/provider/')) {
-    token = prefs.getString('firebase_token');
-  } else {
-    token = prefs.getString('sanctum_token');
-  }
-  if (token != null) {
-    options.headers['Authorization'] = 'Bearer $token';
-  }
-  if (kDebugMode) {
-    debugPrint('[API] ${options.method} ${options.path}');
-  }
-  handler.next(options);
-},
+        final prefs = await SharedPreferences.getInstance();
+        String? token;
+
+        if (options.path.startsWith('/provider/')) {
+          // Routes provider → token Firebase (rafraîchi automatiquement)
+          try {
+            final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
+            if (firebaseUser != null) {
+              token = await firebaseUser.getIdToken(false);
+              await prefs.setString('firebase_token', token!);
+            } else {
+              token = prefs.getString('firebase_token');
+            }
+          } catch (_) {
+            token = prefs.getString('firebase_token');
+          }
+        } else {
+          // Autres routes → token Sanctum
+          token = prefs.getString('sanctum_token');
+        }
+
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        if (kDebugMode) {
+          debugPrint('[API] ${options.method} ${options.path}');
+        }
+        handler.next(options);
+      },
+      onError: (error, handler) {
+        if (error.response?.statusCode == 401) {
+          final path = error.requestOptions.path;
+          if (!path.contains('/auth/')) {
+            debugPrint('[API] Token invalide — déconnexion forcée');
+            onUnauthorized?.call();
+          }
+        }
+        handler.next(error);
+      },
     ));
   }
 
@@ -87,8 +110,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  /// Connexion prestataire via token Firebase.
-  /// Retourne {'is_new': true} si nouveau prestataire sans secteur (HTTP 202).
   Future<Map<String, dynamic>> loginProvider({
     required String firebaseToken,
     String? name,
@@ -111,7 +132,6 @@ class ApiService {
         validateStatus: (status) => status != null && status < 300,
       ),
     );
-    // 202 = nouveau prestataire, profil incomplet → aller vers profile-setup
     if (res.statusCode == 202) {
       return {'is_new': true, 'requires': 'profile_setup'};
     }
