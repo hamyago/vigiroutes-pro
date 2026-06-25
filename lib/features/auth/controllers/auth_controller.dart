@@ -106,19 +106,41 @@ class AuthController extends ChangeNotifier {
   }
 
   // ── Authentification interne ─────────────────────────────────────────────────
-  Future<bool> _signIn(AuthCredential credential) async {
+ Future<bool> _signIn(AuthCredential credential) async {
+  try {
+    final uc = await _firebaseAuth.signInWithCredential(credential);
+    // Ne pas appeler _refreshProvider ici — laisser OtpScreen décider
+    // selon si le provider existe déjà ou non
+    final idToken = await uc.user!.getIdToken(false);
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    
+    // Tenter de récupérer le profil existant
     try {
-      final uc = await _firebaseAuth.signInWithCredential(credential);
-      await _refreshProvider(uc.user!);
-      return true;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('[ProviderAuth] signIn error: ${e.code}');
-      _error     = _friendlyFirebaseError(e.code, e.message);
+      final response = await _api.loginProvider(
+        firebaseToken: idToken!,
+        fcmToken: fcmToken,
+        phone: uc.user!.phoneNumber,
+      );
+      _provider  = ProviderModel.fromJson(response['provider'] as Map<String, dynamic>);
+      _state     = AuthState.authenticated;
+      _isLoading = false;
+      await RealtimeService.instance.init(response['token'] as String);
+      notifyListeners();
+    } catch (e) {
+      // 422 = nouveau prestataire → laisser profile-setup gérer
+      _state     = AuthState.unauthenticated;
       _isLoading = false;
       notifyListeners();
-      return false;
     }
+    return true;
+  } on FirebaseAuthException catch (e) {
+    debugPrint('[ProviderAuth] signIn error: ${e.code}');
+    _error     = _friendlyFirebaseError(e.code, e.message);
+    _isLoading = false;
+    notifyListeners();
+    return false;
   }
+}
 
   Future<void> _refreshProvider(User firebaseUser, {
     String? name,
