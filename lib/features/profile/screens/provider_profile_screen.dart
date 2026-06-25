@@ -1,3 +1,5 @@
+﻿import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
@@ -22,31 +24,18 @@ class ProviderProfileScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // Avatar
           _PhotoAvatar(uid: uid, photoUrl: provider?.photoUrl),
           const SizedBox(height: 24),
-
-          // Infos de base
           _InfoCard(provider: provider),
           const SizedBox(height: 16),
-
-          // KYC
           _KycCard(provider: provider, uid: uid),
           const SizedBox(height: 16),
-
-          // Stats
           _StatsCard(provider: provider),
           const SizedBox(height: 16),
-
-          // Abonnement (crédits de dépannage)
           _SubscriptionCard(onTap: () => context.push('/provider/subscription')),
           const SizedBox(height: 16),
-
-          // ── Mes tarifs ────────────────────────────────────────────
           _RatesCard(onTap: () => context.push('/provider/rates')),
           const SizedBox(height: 24),
-
-          // Déconnexion
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -67,8 +56,6 @@ class ProviderProfileScreen extends StatelessWidget {
   }
 }
 
-// ── Rates Card ────────────────────────────────────────────────────────────────
-
 class _RatesCard extends StatelessWidget {
   final VoidCallback onTap;
   const _RatesCard({required this.onTap});
@@ -82,10 +69,10 @@ class _RatesCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withOpacity(0.05),
                 blurRadius: 8,
               ),
             ],
@@ -108,19 +95,14 @@ class _RatesCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Mes tarifs',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'Personnaliser mes prix par service',
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12),
-                    ),
+                    Text('Mes tarifs',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: AppColors.textPrimary)),
+                    Text('Personnaliser mes prix par service',
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 12)),
                   ],
                 ),
               ),
@@ -130,8 +112,6 @@ class _RatesCard extends StatelessWidget {
         ),
       );
 }
-
-// ── Photo Avatar ──────────────────────────────────────────────────────────────
 
 class _PhotoAvatar extends StatefulWidget {
   final String uid;
@@ -150,13 +130,24 @@ class _PhotoAvatarState extends State<_PhotoAvatar> {
     if (kIsWeb) return;
     final picker = ImagePicker();
     final file   = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 80);
+        source: ImageSource.gallery, imageQuality: 80, maxWidth: 800);
     if (file == null) return;
     setState(() => _loading = true);
     try {
-      await ApiService.instance.updateProvider({'photo_base64': 'photo'});
-      setState(() => _cacheKey = DateTime.now().millisecondsSinceEpoch);
+      // Lire le fichier et convertir en base64
+      final bytes = await File(file.path).readAsBytes();
+      final base64Image = base64Encode(bytes);
+      final ext = file.path.split('.').last.toLowerCase();
+
+      await ApiService.instance.updateProvider({
+        'photo_base64': 'data:image/$ext;base64,$base64Image',
+      });
+
+      // Rafraîchir le profil
       if (mounted) {
+        final auth = context.read<AuthController>();
+        await auth.refreshProvider();
+        setState(() => _cacheKey = DateTime.now().millisecondsSinceEpoch);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Photo mise à jour ✅'),
             backgroundColor: AppColors.success));
@@ -209,8 +200,6 @@ class _PhotoAvatarState extends State<_PhotoAvatar> {
       );
 }
 
-// ── Info Card ─────────────────────────────────────────────────────────────────
-
 class _InfoCard extends StatelessWidget {
   final ProviderModel? provider;
   const _InfoCard({this.provider});
@@ -222,8 +211,7 @@ class _InfoCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -274,8 +262,6 @@ class _Row extends StatelessWidget {
       );
 }
 
-// ── KYC Card ──────────────────────────────────────────────────────────────────
-
 class _KycCard extends StatefulWidget {
   final ProviderModel? provider;
   final String uid;
@@ -288,16 +274,39 @@ class _KycCard extends StatefulWidget {
 class _KycCardState extends State<_KycCard> {
   bool _loading = false;
 
+  // Statut local pour mise à jour immédiate de l'UI
+  bool _idCardSubmitted  = false;
+  bool _licenseSubmitted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // On ne peut pas savoir depuis le modèle si chaque doc est soumis
+    // On initialise depuis is_verified (proxy)
+    _licenseSubmitted = widget.provider?.isVerified ?? false;
+  }
+
   Future<void> _uploadDoc(String field, String label) async {
     if (kIsWeb) return;
     final picker = ImagePicker();
     final file   = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 85);
+        source: ImageSource.gallery, imageQuality: 85, maxWidth: 1200);
     if (file == null) return;
     setState(() => _loading = true);
     try {
-      await ApiService.instance
-          .updateProvider({field: 'uploaded', 'field_name': field});
+      final bytes       = await File(file.path).readAsBytes();
+      final base64Image = base64Encode(bytes);
+      final ext         = file.path.split('.').last.toLowerCase();
+
+      await ApiService.instance.updateProvider({
+        field: 'data:image/$ext;base64,$base64Image',
+      });
+
+      setState(() {
+        if (field == 'id_card_url')     _idCardSubmitted  = true;
+        if (field == 'pro_license_url') _licenseSubmitted = true;
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('$label envoyé ✅'),
@@ -320,8 +329,7 @@ class _KycCardState extends State<_KycCard> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -329,30 +337,26 @@ class _KycCardState extends State<_KycCard> {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 4),
           const Text('Soumettez vos documents pour être vérifié par Oyop MT.',
-              style: TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13)),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
           const SizedBox(height: 16),
           _DocRow(
             label: "Pièce d'identité",
-            status: widget.provider?.photoUrl != null
-                ? 'Soumis ✅' : 'Non soumis',
-            statusColor: widget.provider?.photoUrl != null
-                ? AppColors.success : AppColors.warning,
-            onUpload: _loading
-                ? null
+            status: _idCardSubmitted ? 'Soumis ✅' : 'Non soumis',
+            statusColor: _idCardSubmitted ? AppColors.success : AppColors.warning,
+            onUpload: _loading ? null
                 : () => _uploadDoc('id_card_url', "Pièce d'identité"),
           ),
           const SizedBox(height: 8),
           _DocRow(
             label: 'Licence professionnelle',
             status: widget.provider?.isVerified == true
-                ? 'Vérifié ✅' : 'Non soumis',
+                ? 'Vérifié ✅'
+                : _licenseSubmitted ? 'Soumis ✅' : 'Non soumis',
             statusColor: widget.provider?.isVerified == true
-                ? AppColors.success : AppColors.warning,
-            onUpload: _loading
-                ? null
-                : () => _uploadDoc(
-                    'pro_license_url', 'Licence professionnelle'),
+                ? AppColors.success
+                : _licenseSubmitted ? AppColors.success : AppColors.warning,
+            onUpload: _loading ? null
+                : () => _uploadDoc('pro_license_url', 'Licence professionnelle'),
           ),
         ]),
       );
@@ -371,10 +375,8 @@ class _DocRow extends StatelessWidget {
         Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              Text(label,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(status,
-                  style: TextStyle(color: statusColor, fontSize: 12)),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(status, style: TextStyle(color: statusColor, fontSize: 12)),
             ])),
         TextButton.icon(
           onPressed: onUpload,
@@ -383,8 +385,6 @@ class _DocRow extends StatelessWidget {
         ),
       ]);
 }
-
-// ── Stats Card ────────────────────────────────────────────────────────────────
 
 class _StatsCard extends StatelessWidget {
   final ProviderModel? provider;
@@ -397,8 +397,7 @@ class _StatsCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -406,12 +405,10 @@ class _StatsCard extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 12),
           Row(children: [
-            _StatBox(
-                label: 'Interventions',
+            _StatBox(label: 'Interventions',
                 value: '${provider?.totalInterventions ?? 0}'),
             const SizedBox(width: 12),
-            _StatBox(
-                label: 'Gains totaux',
+            _StatBox(label: 'Gains totaux',
                 value: '${(provider?.totalEarnings ?? 0).toStringAsFixed(0)} F'),
           ]),
         ]),
@@ -446,8 +443,6 @@ class _StatBox extends StatelessWidget {
       );
 }
 
-// ── Subscription Card ─────────────────────────────────────────────────────────
-
 class _SubscriptionCard extends StatelessWidget {
   final VoidCallback onTap;
   const _SubscriptionCard({required this.onTap});
@@ -477,8 +472,7 @@ class _SubscriptionCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                           fontSize: 16)),
                   Text('Voir mes crédits et renouveler mon offre',
-                      style: TextStyle(
-                          color: Colors.white70, fontSize: 12)),
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
             ),
