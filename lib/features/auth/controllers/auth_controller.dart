@@ -161,7 +161,7 @@ class AuthController extends ChangeNotifier {
     double? longitude,
   }) async {
     try {
-      final idToken  = await firebaseUser.getIdToken(false);
+      final idToken  = await firebaseUser.getIdToken(true);
       final fcmToken = await FirebaseMessaging.instance.getToken();
 
       // Sauvegarder le token Firebase pour les requêtes /provider/
