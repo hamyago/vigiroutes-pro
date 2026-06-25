@@ -1,3 +1,4 @@
+@'
 {
   "project_info": {
     "project_number": "603913934385",
@@ -13,6 +14,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ci.oyopmt.vigiroutes.client",
+            "certificate_hash": "e75b66ed0ae574b11ffa132d5955f00cc82ec8cb"
+          }
+        },
         {
           "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
           "client_type": 3
@@ -51,6 +60,14 @@
       "oauth_client": [
         {
           "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ci.oyopmt.vigiroutes.provider",
+            "certificate_hash": "e75b66ed0ae574b11ffa132d5955f00cc82ec8cb"
+          }
+        },
+        {
+          "client_id": "603913934385-v69q865um6f1c0qf44b1lhr15fhriuv9.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -80,3 +97,4 @@
   ],
   "configuration_version": "1"
 }
+'@ | Out-File -FilePath "C:\Users\YAS\Desktop\google-services.json" -Encoding UTF8
