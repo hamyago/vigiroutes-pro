@@ -147,7 +147,12 @@ class AuthController extends ChangeNotifier {
       await RealtimeService.instance.init(response['token'] as String);
       notifyListeners();
     } catch (e) {
-      debugPrint('[ProviderAuth] _refreshProvider error: $e');
+      debugPrint('[ProviderAuth] ERROR TYPE: ${e.runtimeType}');
+debugPrint('[ProviderAuth] ERROR DETAIL: $e');
+if (e is DioException) {
+  debugPrint('[ProviderAuth] DIO STATUS: ${e.response?.statusCode}');
+  debugPrint('[ProviderAuth] DIO DATA: ${e.response?.data}');
+}
       _error     = 'Impossible de se connecter au serveur. Vérifiez votre connexion.';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
