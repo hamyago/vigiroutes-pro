@@ -78,7 +78,7 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
     }).toList();
 
     try {
-      await ApiService.instance.post('/provider/rates', data: {'rates': ratesToSave});
+      await ApiService.instance.patch('/provider/rates', data: {'rates': ratesToSave});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
