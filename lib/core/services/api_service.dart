@@ -25,22 +25,23 @@ class ApiService {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        final token = (await SharedPreferences.getInstance()).getString('sanctum_token');
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        if (kDebugMode) {
-          debugPrint('[API] ${options.method} ${options.path}');
-        }
-        handler.next(options);
-      },
-      onError: (error, handler) {
-        if (error.response?.statusCode == 401) {
-          debugPrint('[API] Token invalide — déconnexion forcée');
-          onUnauthorized?.call();
-        }
-        handler.next(error);
-      },
+  final prefs = await SharedPreferences.getInstance();
+  // Routes provider → token Firebase
+  // Routes autres → token Sanctum
+  String? token;
+  if (options.path.startsWith('/provider/')) {
+    token = prefs.getString('firebase_token');
+  } else {
+    token = prefs.getString('sanctum_token');
+  }
+  if (token != null) {
+    options.headers['Authorization'] = 'Bearer $token';
+  }
+  if (kDebugMode) {
+    debugPrint('[API] ${options.method} ${options.path}');
+  }
+  handler.next(options);
+},
     ));
   }
 

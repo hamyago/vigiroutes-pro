@@ -1,6 +1,7 @@
 ﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';
@@ -104,12 +105,16 @@ class AuthController extends ChangeNotifier {
 
   Future<bool> _signIn(AuthCredential credential) async {
     try {
-      final uc       = await _firebaseAuth.signInWithCredential(credential);
-      final idToken  = await uc.user!.getIdToken(false);
+      final uc      = await _firebaseAuth.signInWithCredential(credential);
+      final idToken = await uc.user!.getIdToken(false);
       final fcmToken = await FirebaseMessaging.instance.getToken();
 
+      // Sauvegarder le token Firebase pour les requêtes /provider/
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('firebase_token', idToken!);
+
       final response = await _api.loginProvider(
-        firebaseToken: idToken!,
+        firebaseToken: idToken,
         fcmToken:      fcmToken,
         phone:         uc.user!.phoneNumber,
       );
@@ -143,7 +148,7 @@ class AuthController extends ChangeNotifier {
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
-      return true; // true = OTP validé, même si API échoue
+      return true;
     }
   }
 
@@ -159,8 +164,12 @@ class AuthController extends ChangeNotifier {
       final idToken  = await firebaseUser.getIdToken(false);
       final fcmToken = await FirebaseMessaging.instance.getToken();
 
+      // Sauvegarder le token Firebase pour les requêtes /provider/
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('firebase_token', idToken!);
+
       final response = await _api.loginProvider(
-        firebaseToken: idToken!,
+        firebaseToken: idToken,
         name:          name,
         phone:         phone ?? firebaseUser.phoneNumber,
         fcmToken:      fcmToken,
