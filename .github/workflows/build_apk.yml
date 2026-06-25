@@ -1,4 +1,4 @@
-﻿name: Build VigiRoutes Pro APK
+name: Build VigiRoutes Pro APK
 
 on:
   push:
@@ -23,22 +23,39 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.32.0
+          flutter-version: '3.44.1'
           channel: stable
           cache: true
 
+      # IMPORTANT : google-services.json est requis pour Firebase Phone Auth
       - name: Create google-services.json
-        run: echo '${{ secrets.GOOGLE_SERVICES_JSON_PRO }}' > android/app/google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
 
       - name: Create local.properties
         run: |
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          echo "MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}" >> android/local.properties
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
+
+      - name: Create key.properties
+        run: |
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=vigiroutes" >> android/key.properties
+          echo "storeFile=app/vigiroutes-release.jks" >> android/key.properties
 
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Build APK
+      # Supprimer le MainActivity en double (résidu du mauvais package)
+      - name: Remove duplicate MainActivity
+        run: |
+          rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_provider
+
+      - name: Build APK Release
         run: flutter build apk --release
 
       - name: Upload APK

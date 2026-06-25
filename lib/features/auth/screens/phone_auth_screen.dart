@@ -18,17 +18,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   final _controller = TextEditingController();
   String _phoneNumber = '';
   bool   _valid       = false;
+  bool   _waitingForOtp = false; // ← nouveau flag
 
-  // Construit le numéro au format E.164 pour Firebase
-  // Numéros CI : toujours 10 chiffres avec le 0 initial
-  // Ex: 0747457878 → +2250747457878
+  /// Format E.164 pour Firebase
+  /// Numéros CI 10 chiffres avec 0 → +225XXXXXXXXXX
   String _buildE164(String input) {
     final digits = input.replaceAll(RegExp(r'\D'), '');
-    // Si déjà 10 chiffres commençant par 0 → format correct
     if (digits.length == 10 && digits.startsWith('0')) {
       return '+225$digits';
     }
-    // Si 9 chiffres sans le 0 → ajouter le 0
     if (digits.length == 9 && !digits.startsWith('0')) {
       return '+2250$digits';
     }
@@ -37,24 +35,45 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   bool _isValid(String input) {
     final digits = input.replaceAll(RegExp(r'\D'), '');
-    // Accepter 10 chiffres avec 0 initial OU 9 chiffres sans le 0
     return (digits.length == 10 && digits.startsWith('0')) ||
            (digits.length == 9 && !digits.startsWith('0'));
   }
 
+  // ─── CORRECTION PRINCIPALE ──────────────────────────────────────────────────
+  // verifyPhoneNumber() est asynchrone : Firebase appelle codeSent()
+  // APRÈS que sendOtp() revient. On utilise un listener pour détecter
+  // le changement d'état et naviguer au bon moment.
   Future<void> _handleSendOtp(AuthController auth) async {
+    if (_waitingForOtp) return;
+    setState(() => _waitingForOtp = true);
+
+    void listener() {
+      if (!mounted) return;
+      if (auth.otpSent && auth.error == null) {
+        auth.removeListener(listener);
+        setState(() => _waitingForOtp = false);
+        context.go(
+          '/auth/otp',
+          extra: {
+            'phone':      _phoneNumber,
+            'isProvider': widget.isProvider,
+          },
+        );
+      } else if (auth.error != null && !auth.isLoading) {
+        auth.removeListener(listener);
+        setState(() => _waitingForOtp = false);
+      }
+    }
+
+    auth.addListener(listener);
     await auth.sendOtp(_phoneNumber);
-    if (!mounted) return;
-    if (auth.otpSent && auth.error == null) {
-      context.go(
-        '/auth/otp',
-        extra: {
-          'phone':      _phoneNumber,
-          'isProvider': widget.isProvider,
-        },
-      );
+
+    if (mounted && !auth.isLoading && !auth.otpSent && auth.error == null) {
+      auth.removeListener(listener);
+      setState(() => _waitingForOtp = false);
     }
   }
+  // ────────────────────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
@@ -65,6 +84,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
+    final isLoading = auth.isLoading || _waitingForOtp;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -109,7 +130,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Champ numéro — indicatif +225 fixe
               Container(
                 decoration: BoxDecoration(
                   border: Border(
@@ -149,7 +169,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         ],
                         decoration: const InputDecoration(
                           border: InputBorder.none,
-                          // Hint avec le 0 pour guider l'utilisateur
                           hintText: '0747457878',
                           contentPadding: EdgeInsets.symmetric(
                               horizontal: 12, vertical: 16),
@@ -158,9 +177,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         onChanged: (value) {
                           setState(() {
                             _valid = _isValid(value);
-                            if (_valid) {
-                              _phoneNumber = _buildE164(value);
-                            }
+                            if (_valid) _phoneNumber = _buildE164(value);
                           });
                         },
                       ),
@@ -206,9 +223,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
               const Spacer(),
               AppButton(
-                label: 'Recevoir le code',
-                isLoading: auth.isLoading,
-                enabled: _valid && !auth.isLoading,
+                label: isLoading ? 'Envoi en cours...' : 'Recevoir le code',
+                isLoading: isLoading,
+                enabled: _valid && !isLoading,
                 onPressed: () => _handleSendOtp(auth),
               ),
               const SizedBox(height: 16),
