@@ -1,8 +1,7 @@
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../features/auth/controllers/auth_controller.dart';
 import '../../../core/services/api_service.dart';
 
 class ProviderRatesScreen extends StatefulWidget {
@@ -18,7 +17,6 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
   bool _isSaving  = false;
   String? _error;
 
-  // Contrôleurs pour chaque service
   final Map<String, TextEditingController> _basePriceControllers  = {};
   final Map<String, TextEditingController> _pricePerKmControllers = {};
 
@@ -41,13 +39,10 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
       final rates = (res.data['rates'] as List)
           .map((e) => e as Map<String, dynamic>)
           .toList();
-
       setState(() {
         _rates     = rates;
         _isLoading = false;
       });
-
-      // Initialiser les contrôleurs
       for (final rate in rates) {
         final id = rate['service_type_id'] as String;
         _basePriceControllers[id] = TextEditingController(
@@ -57,7 +52,7 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Impossible de charger vos tarifs';
+        _error     = 'Impossible de charger vos tarifs';
         _isLoading = false;
       });
     }
@@ -65,15 +60,12 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
 
   Future<void> _saveRates() async {
     setState(() => _isSaving = true);
-
     final ratesToSave = _rates.map((rate) {
       final id = rate['service_type_id'] as String;
       return {
         'service_type_id': id,
-        'base_price':
-            double.tryParse(_basePriceControllers[id]?.text ?? '0') ?? 0,
-        'price_per_km':
-            double.tryParse(_pricePerKmControllers[id]?.text ?? '0') ?? 0,
+        'base_price':  double.tryParse(_basePriceControllers[id]?.text ?? '0') ?? 0,
+        'price_per_km': double.tryParse(_pricePerKmControllers[id]?.text ?? '0') ?? 0,
       };
     }).toList();
 
@@ -89,10 +81,21 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String msg = 'Erreur lors de l\'enregistrement.';
+        if (e is DioException && e.response?.data != null) {
+          final data = e.response!.data;
+          if (data is Map && data['message'] != null) {
+            msg = data['message'].toString();
+          } else if (data is Map && data['errors'] != null) {
+            final errors = data['errors'] as Map;
+            msg = errors.values.first.toString();
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Erreur: $e'),
+            content: Text('❌ $msg'),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -125,8 +128,7 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
               onPressed: _isSaving ? null : _saveRates,
               child: _isSaving
                   ? const SizedBox(
-                      width: 20,
-                      height: 20,
+                      width: 20, height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text('Enregistrer',
                       style: TextStyle(
@@ -158,7 +160,6 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Info banner
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -167,8 +168,7 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.info_outline,
-                                color: AppColors.primary),
+                            const Icon(Icons.info_outline, color: AppColors.primary),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -176,28 +176,21 @@ class _ProviderRatesScreenState extends State<ProviderRatesScreen> {
                                 'Les minimums fixés par VigiRoutes '
                                 'sont indiqués sous chaque champ.',
                                 style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontSize: 13,
-                                  height: 1.4,
-                                ),
+                                    color: AppColors.primary,
+                                    fontSize: 13,
+                                    height: 1.4),
                               ),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 24),
-
-                      // Liste des services
                       ..._rates.map((rate) => _ServiceRateCard(
-                            rate:              rate,
-                            emoji:             _emojiFromSlug(
+                            rate:           rate,
+                            emoji:          _emojiFromSlug(
                                 rate['service_type_slug'] as String? ?? ''),
-                            basePriceCtrl:
-                                _basePriceControllers[
-                                    rate['service_type_id']]!,
-                            pricePerKmCtrl:
-                                _pricePerKmControllers[
-                                    rate['service_type_id']]!,
+                            basePriceCtrl:  _basePriceControllers[rate['service_type_id']]!,
+                            pricePerKmCtrl: _pricePerKmControllers[rate['service_type_id']]!,
                           )),
                     ],
                   ),
@@ -243,7 +236,6 @@ class _ServiceRateCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               children: [
                 Text(emoji, style: const TextStyle(fontSize: 28)),
@@ -252,13 +244,9 @@ class _ServiceRateCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        rate['service_type_name'] as String,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      Text(rate['service_type_name'] as String,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700)),
                       if (hasCustom)
                         Container(
                           margin: const EdgeInsets.only(top: 4),
@@ -268,14 +256,11 @@ class _ServiceRateCard extends StatelessWidget {
                             color: AppColors.successLight,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
-                            'Tarif personnalisé',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.success,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          child: const Text('Tarif personnalisé',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.w600)),
                         ),
                     ],
                   ),
@@ -285,95 +270,70 @@ class _ServiceRateCard extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 16),
-
-            // Champs de tarifs
             Row(
               children: [
-                // Prix de base
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Prix de base',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      const Text('Prix de base',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary)),
                       const SizedBox(height: 8),
                       TextField(
                         controller: basePriceCtrl,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
                           suffixText: 'FCFA',
                           filled: true,
                           fillColor: AppColors.surfaceVariant,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide.none,
-                          ),
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 10),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'Min: $minBase FCFA',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
+                      Text('Min: $minBase FCFA',
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.textMuted)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 16),
-
-                // Prix par km
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Prix par km',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      const Text('Prix par km',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary)),
                       const SizedBox(height: 8),
                       TextField(
                         controller: pricePerKmCtrl,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
                           suffixText: 'FCFA',
                           filled: true,
                           fillColor: AppColors.surfaceVariant,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide.none,
-                          ),
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 10),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'Min: $minPerKm FCFA/km',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
+                      Text('Min: $minPerKm FCFA/km',
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.textMuted)),
                     ],
                   ),
                 ),
