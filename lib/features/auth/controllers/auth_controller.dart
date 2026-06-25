@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';
+import 'package:dio/dio.dart';
 
 enum AuthState { unknown, authenticated, unauthenticated }
 
@@ -148,11 +149,7 @@ class AuthController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[ProviderAuth] ERROR TYPE: ${e.runtimeType}');
-debugPrint('[ProviderAuth] ERROR DETAIL: $e');
-if (e is DioException) {
-  debugPrint('[ProviderAuth] DIO STATUS: ${e.response?.statusCode}');
-  debugPrint('[ProviderAuth] DIO DATA: ${e.response?.data}');
-}
+      debugPrint('[ProviderAuth] ERROR DETAIL: $e');
       _error     = 'Impossible de se connecter au serveur. Vérifiez votre connexion.';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
