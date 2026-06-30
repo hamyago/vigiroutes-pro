@@ -1,3 +1,3 @@
-﻿// Top-level build file
+// Top-level build file
 plugins {
 }

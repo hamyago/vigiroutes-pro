@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/models/models.dart';
+import '../../../core/services/alert_service.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';
 import '../../../core/services/location_service.dart';
@@ -85,9 +86,13 @@ class ProviderController extends ChangeNotifier {
     _wsSub = _realtime.subscribeToDispatch(_provider!.id).listen((data) {
       final updated = InterventionModel.fromJson(data);
 
-      // Nouvelle demande de dispatch → afficher l'alerte
+      // Nouvelle demande de dispatch → afficher l'alerte + sonnerie
       if (updated.dispatchedProviderId == _provider!.id && updated.isPending) {
         _pendingDispatch = updated;
+        ProviderAlertService.instance.newOrder(
+          dispatchId:  updated.id,
+          serviceName: updated.serviceTypeName,
+        );
         notifyListeners();
         return;
       }
@@ -103,6 +108,7 @@ class ProviderController extends ChangeNotifier {
       // Effacer l'alerte si résolue
       if (_pendingDispatch?.id == updated.id && !updated.isPending) {
         _pendingDispatch = null;
+        ProviderAlertService.instance.stop();
       }
       notifyListeners();
     });
@@ -139,6 +145,7 @@ class ProviderController extends ChangeNotifier {
 
   Future<bool> acceptIntervention(String id) async {
     _isLoading = true;
+    ProviderAlertService.instance.stop();
     notifyListeners();
     try {
       final data    = await _api.acceptIntervention(id);
@@ -170,6 +177,7 @@ class ProviderController extends ChangeNotifier {
   }
 
   Future<void> declineIntervention(String id) async {
+    ProviderAlertService.instance.stop();
     await _api.cancelIntervention(id);
     _pendingDispatch = null;
     notifyListeners();
