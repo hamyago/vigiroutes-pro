@@ -20,15 +20,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _formKey   = GlobalKey<FormState>();
   final _locationService = LocationService();
 
-  String? _selectedSector;
+  final Set<String> _selectedServices = {};
   bool _loadingLocation = false;
   double? _lat, _lng;
 
-  static const _sectors = [
-    {'value': 'mecanicien',       'label': '🔧 Mécanicien'},
-    {'value': 'electricien_auto', 'label': '⚡ Électricien Auto'},
-    {'value': 'vulcanisateur',    'label': '🔩 Vulcanisateur'},
-    {'value': 'remorqueur',       'label': '🚛 Remorqueur'},
+  // Services proposés (ids alignés sur le catalogue client /service-types).
+  // Le prestataire peut en cocher PLUSIEURS.
+  static const _services = [
+    {'value': 'depannage',   'label': '🔧 Dépannage'},
+    {'value': 'pneu',        'label': '🔩 Pneu (crevaison)'},
+    {'value': 'remorquage',  'label': '🚛 Remorquage'},
+    {'value': 'electricite', 'label': '⚡ Électricité auto'},
   ];
 
   @override
@@ -52,9 +54,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthController>();
 
-    if (_selectedSector == null) {
+    if (_selectedServices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sélectionnez votre secteur d\'activité.')),
+        const SnackBar(content: Text('Sélectionnez au moins un service.')),
       );
       return;
     }
@@ -71,8 +73,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     await auth.completeProviderProfile(
       name:         _nameCtrl.text.trim(),
       phone:        _phoneCtrl.text.trim(),
-      sector:       _selectedSector!,
-      serviceTypes: [],
+      sector:       _selectedServices.first,
+      serviceTypes: _selectedServices.toList(),
       latitude:     _lat!,
       longitude:    _lng!,
     );
@@ -143,17 +145,23 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Secteur d\'activité',
+                  'Services proposés (un ou plusieurs)',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: _sectors.map((s) {
-                    final selected = _selectedSector == s['value'];
+                  children: _services.map((s) {
+                    final selected = _selectedServices.contains(s['value']);
                     return GestureDetector(
-                      onTap: () => setState(() => _selectedSector = s['value']),
+                      onTap: () => setState(() {
+                        if (selected) {
+                          _selectedServices.remove(s['value']);
+                        } else {
+                          _selectedServices.add(s['value']!);
+                        }
+                      }),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -164,12 +172,21 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             color: selected ? AppColors.primary : AppColors.border,
                           ),
                         ),
-                        child: Text(
-                          s['label']!,
-                          style: TextStyle(
-                            color: selected ? Colors.white : AppColors.textPrimary,
-                            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (selected) ...[
+                              const Icon(Icons.check, size: 16, color: Colors.white),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(
+                              s['label']!,
+                              style: TextStyle(
+                                color: selected ? Colors.white : AppColors.textPrimary,
+                                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );
