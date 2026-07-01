@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'core/services/api_service.dart';
 import 'core/services/service_type_service.dart';
 import 'features/auth/controllers/auth_controller.dart';
+import 'core/theme/theme_controller.dart';
 import 'shared/navigation/app_router.dart';
 
 @pragma('vm:entry-point')
@@ -27,8 +28,11 @@ class AutoSosProviderApp extends StatelessWidget {
   const AutoSosProviderApp({super.key});
 
   @override
-  Widget build(BuildContext context) => ChangeNotifierProvider(
-        create: (_) => AuthController(),
+  Widget build(BuildContext context) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AuthController()),
+          ChangeNotifierProvider(create: (_) => ThemeController()),
+        ],
         child: const _AppRouter(),
       );
 }
@@ -52,13 +56,31 @@ class _AppRouterState extends State<_AppRouter> {
 
   @override
   Widget build(BuildContext context) {
+    final themeCtrl = context.watch<ThemeController>();
     return MaterialApp.router(
       title: 'VigiRoutes Pro',
       debugShowCheckedModeBanner: false,
+      themeMode: themeCtrl.mode,
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFFFF6B35),
         useMaterial3: true,
         fontFamily: 'Poppins',
+        brightness: Brightness.light,
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+      ),
+      darkTheme: ThemeData(
+        colorSchemeSeed: const Color(0xFFFF6B35),
+        useMaterial3: true,
+        fontFamily: 'Poppins',
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        cardColor: const Color(0xFF1E1E1E),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             minimumSize: const Size(double.infinity, 52),

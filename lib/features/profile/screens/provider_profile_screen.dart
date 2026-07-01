@@ -9,6 +9,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../../core/theme/theme_controller.dart';
 import '../../../shared/widgets/provider_bottom_nav.dart';
 
 class ProviderProfileScreen extends StatelessWidget {
@@ -37,6 +38,20 @@ class ProviderProfileScreen extends StatelessWidget {
           _SubscriptionCard(onTap: () => context.push('/provider/subscription')),
           const SizedBox(height: 16),
           _RatesCard(onTap: () => context.push('/provider/rates')),
+          const SizedBox(height: 16),
+          _MenuTile(
+            icon: Icons.person_outline,
+            title: 'Informations prestataire',
+            onTap: () => context.push('/provider/info'),
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
+            icon: Icons.receipt_long_outlined,
+            title: 'Historique des souscriptions',
+            onTap: () => context.push('/provider/subscription/history'),
+          ),
+          const SizedBox(height: 12),
+          const _DarkModeTile(),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -53,6 +68,57 @@ class ProviderProfileScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  const _MenuTile(
+      {required this.icon, required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).cardColor,
+      borderRadius: BorderRadius.circular(14),
+      child: ListTile(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+        title: Text(title,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _DarkModeTile extends StatelessWidget {
+  const _DarkModeTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<ThemeController>();
+    final isDark = theme.isDark ||
+        (theme.mode == ThemeMode.system &&
+            MediaQuery.of(context).platformBrightness == Brightness.dark);
+    return Material(
+      color: Theme.of(context).cardColor,
+      borderRadius: BorderRadius.circular(14),
+      child: SwitchListTile(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        secondary: Icon(isDark ? Icons.dark_mode : Icons.light_mode,
+            color: Theme.of(context).colorScheme.primary),
+        title: const Text('Mode sombre',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        value: isDark,
+        onChanged: (v) => theme.toggleDark(v),
       ),
     );
   }

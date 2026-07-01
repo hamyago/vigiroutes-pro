@@ -12,6 +12,8 @@ import '../../features/interventions/screens/provider_navigation_screen.dart';
 import '../../features/earnings/screens/provider_earnings_screen.dart';
 import '../../features/history/screens/provider_history_screen.dart';
 import '../../features/profile/screens/provider_profile_screen.dart';
+import '../../features/profile/screens/provider_info_screen.dart';
+import '../../features/profile/screens/provider_subscription_history_screen.dart';
 import '../../features/profile/screens/provider_rates_screen.dart';
 import '../../features/subscription/screens/provider_subscription_screen.dart';
 import '../../features/home/controllers/provider_controller.dart';
@@ -79,6 +81,12 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
 
         GoRoute(path: '/provider/subscription', builder: (ctx, s) =>
             const ProviderSubscriptionScreen()),
+
+        // ── Infos prestataire + historique souscriptions ─────────
+        GoRoute(path: '/provider/info', builder: (ctx, s) =>
+            const ProviderInfoScreen()),
+        GoRoute(path: '/provider/subscription/history', builder: (ctx, s) =>
+            const ProviderSubscriptionHistoryScreen()),
 
         // ── Tarifs prestataire ────────────────────────────────────
         GoRoute(path: '/provider/rates', builder: (ctx, s) =>

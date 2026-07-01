@@ -260,6 +260,15 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> getProviderSubscriptionHistory() async {
+    final res = await get('/provider/subscription/history');
+    final data = res.data;
+    if (data is Map && data['subscriptions'] is List) {
+      return data['subscriptions'] as List<dynamic>;
+    }
+    return const [];
+  }
+
   Future<Map<String, dynamic>> subscribeProvider(Map<String, dynamic> data) async {
     final res = await post('/provider/subscription/subscribe', data: data);
     return res.data as Map<String, dynamic>;
