@@ -58,6 +58,8 @@ class ProviderModel {
   final bool isAvailable;
   final bool isActive;
   final bool isVerified;
+  final String? idCardUrl;
+  final String? proLicenseUrl;
   final List<String> serviceTypes;
   final double rating;
   final int ratingCount;
@@ -76,6 +78,8 @@ class ProviderModel {
     required this.isAvailable,
     required this.isActive,
     required this.isVerified,
+    this.idCardUrl,
+    this.proLicenseUrl,
     required this.serviceTypes,
     required this.rating,
     required this.ratingCount,
@@ -95,6 +99,8 @@ class ProviderModel {
         isAvailable:        json['is_available'] as bool? ?? true,
         isActive:           json['is_active'] as bool? ?? true,
         isVerified:         json['is_verified'] as bool? ?? false,
+        idCardUrl:          json['id_card_url'] as String?,
+        proLicenseUrl:      json['pro_license_url'] as String?,
         serviceTypes:       (json['service_types'] as List?)
                                 ?.map((e) => e as String).toList() ?? [],
         rating:             (json['rating'] as num?)?.toDouble() ?? 0,

@@ -9,6 +9,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/controllers/auth_controller.dart';
+import '../../../shared/widgets/provider_bottom_nav.dart';
 
 class ProviderProfileScreen extends StatelessWidget {
   const ProviderProfileScreen({super.key});
@@ -21,6 +22,7 @@ class ProviderProfileScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Mon profil')),
+      bottomNavigationBar: const ProviderBottomNav(),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -281,9 +283,10 @@ class _KycCardState extends State<_KycCard> {
   @override
   void initState() {
     super.initState();
-    // On ne peut pas savoir depuis le modèle si chaque doc est soumis
-    // On initialise depuis is_verified (proxy)
-    _licenseSubmitted = widget.provider?.isVerified ?? false;
+    // Statut réel : un document est « soumis » s'il a une URL enregistrée.
+    _idCardSubmitted  = (widget.provider?.idCardUrl?.isNotEmpty ?? false);
+    _licenseSubmitted = (widget.provider?.proLicenseUrl?.isNotEmpty ?? false)
+        || (widget.provider?.isVerified ?? false);
   }
 
   Future<void> _uploadDoc(String field, String label) async {
