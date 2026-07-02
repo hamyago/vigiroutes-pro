@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/constants/app_colors.dart';
@@ -33,14 +34,89 @@ class ProviderHistoryScreen extends StatelessWidget {
   }
 }
 
-class _InterventionTile extends StatelessWidget {
+class _InterventionTile extends StatefulWidget {
   final InterventionModel intervention;
   const _InterventionTile({required this.intervention});
 
   @override
+  State<_InterventionTile> createState() => _InterventionTileState();
+}
+
+class _InterventionTileState extends State<_InterventionTile> {
+  bool _accepting = false;
+
+  Future<void> _handleTap() async {
+    final intervention = widget.intervention;
+
+    // Terminée ou annulée : rien à faire, juste un historique consultable.
+    if (intervention.status == 'completed' ||
+        intervention.status == 'cancelled') {
+      return;
+    }
+
+    // Déjà acceptée / en cours : on rejoint directement l'écran de
+    // navigation de cette intervention.
+    if (intervention.status == 'accepted' ||
+        intervention.status == 'in_progress') {
+      context.push('/provider/navigation/${intervention.id}');
+      return;
+    }
+
+    // En attente : proposer d'accepter avant de rejoindre la navigation.
+    // AVANT : cette carte n'avait aucun onTap du tout, impossible d'agir
+    // dessus depuis cet écran (seul l'onglet Accueil le permettait).
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Accepter cette intervention ?'),
+        content: Text(
+            '${intervention.serviceTypeName} · ${PriceCalculator.formatFcfa(intervention.totalPrice)}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Accepter'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _accepting = true);
+    try {
+      final ok = await context
+          .read<ProviderController>()
+          .acceptIntervention(intervention.id)
+          .timeout(const Duration(seconds: 20));
+      if (!mounted) return;
+      if (ok) {
+        context.push('/provider/navigation/${intervention.id}');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Cette intervention n\'est plus disponible (déjà prise par un autre prestataire ?).')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Erreur lors de l\'acceptation : $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _accepting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final intervention = widget.intervention;
     final (statusLabel, statusColor) = _statusInfo(intervention.status);
-    return Container(
+    return InkWell(
+      onTap: _accepting ? null : _handleTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -59,18 +135,23 @@ class _InterventionTile extends StatelessWidget {
             Text(intervention.serviceTypeName,
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
           ]),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
+          if (_accepting)
+            const SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(statusLabel,
+                  style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
             ),
-            child: Text(statusLabel,
-                style: TextStyle(
-                    color: statusColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
-          ),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -94,6 +175,7 @@ class _InterventionTile extends StatelessWidget {
           ]),
         ],
       ]),
+      ),
     );
   }
 
