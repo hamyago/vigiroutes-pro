@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'core/services/api_service.dart';
 import 'core/services/service_type_service.dart';
 import 'features/auth/controllers/auth_controller.dart';
+import 'features/home/controllers/provider_controller.dart';
 import 'core/theme/theme_controller.dart';
 import 'shared/navigation/app_router.dart';
 
@@ -67,6 +68,7 @@ class AutoSosProviderApp extends StatelessWidget {
         providers: [
           ChangeNotifierProvider(create: (_) => AuthController()),
           ChangeNotifierProvider(create: (_) => ThemeController()),
+          ChangeNotifierProvider(create: (_) => ProviderController()),
         ],
         child: const _AppRouter(),
       );

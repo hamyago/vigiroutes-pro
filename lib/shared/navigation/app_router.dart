@@ -57,12 +57,7 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
             const ProfileSetupScreen(isProvider: true)),
 
         ShellRoute(
-          builder: (ctx, state, child) => MultiProvider(
-            providers: [
-              ChangeNotifierProvider(create: (_) => ProviderController()),
-            ],
-            child: _ProviderShell(child: child),
-          ),
+          builder: (ctx, state, child) => _ProviderShell(child: child),
           routes: [
             GoRoute(path: '/provider/home',
                 builder: (_, __) => const ProviderHomeScreen()),
