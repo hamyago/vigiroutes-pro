@@ -21,6 +21,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _locationService = LocationService();
 
   final Set<String> _selectedServices = {};
+  String? _selectedSector;
   bool _loadingLocation = false;
   double? _lat, _lng;
 
@@ -31,6 +32,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     {'value': 'pneu',        'label': '🔩 Pneu (crevaison)'},
     {'value': 'remorquage',  'label': '🚛 Remorquage'},
     {'value': 'electricite', 'label': '⚡ Électricité auto'},
+  ];
+
+  // Secteur d'activité : catégorie MÉTIER unique du prestataire, distincte des
+  // services cochés ci-dessus. C'est cette valeur que le backend stocke dans
+  // la colonne `sector` (enum). ⚠️ Vérifie que ces 4 slugs correspondent
+  // exactement à l'enum défini côté Laravel (migration / FormRequest).
+  static const _sectors = [
+    {'value': 'vulcanisateur',   'label': '🔩 Vulcanisateur'},
+    {'value': 'mecanicien',      'label': '🔧 Mécanicien'},
+    {'value': 'remorqueur',      'label': '🚛 Remorqueur'},
+    {'value': 'electricien_auto','label': '⚡ Électricien Auto'},
   ];
 
   @override
@@ -54,6 +66,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthController>();
 
+    if (_selectedSector == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionnez votre secteur d\'activité.')),
+      );
+      return;
+    }
     if (_selectedServices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sélectionnez au moins un service.')),
@@ -73,7 +91,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     await auth.completeProviderProfile(
       name:         _nameCtrl.text.trim(),
       phone:        _phoneCtrl.text.trim(),
-      sector:       _selectedServices.first,
+      sector:       _selectedSector!,
       serviceTypes: _selectedServices.toList(),
       latitude:     _lat!,
       longitude:    _lng!,
@@ -142,6 +160,49 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     hintText: '+225...',
                   ),
                   keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Votre secteur d\'activité (un seul)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _sectors.map((s) {
+                    final selected = _selectedSector == s['value'];
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedSector = s['value']),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: selected ? AppColors.primaryDark : AppColors.surfaceVariant,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: selected ? AppColors.primaryDark : AppColors.border,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (selected) ...[
+                              const Icon(Icons.check, size: 16, color: Colors.white),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(
+                              s['label']!,
+                              style: TextStyle(
+                                color: selected ? Colors.white : AppColors.textPrimary,
+                                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
                 const SizedBox(height: 24),
                 const Text(

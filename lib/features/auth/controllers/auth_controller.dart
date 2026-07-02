@@ -148,7 +148,7 @@ class AuthController extends ChangeNotifier {
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
-      return true;
+      return false;
     }
   }
 
@@ -175,6 +175,8 @@ class AuthController extends ChangeNotifier {
         fcmToken:      fcmToken,
         serviceTypes:  serviceTypes,
         sector:        sector,
+        latitude:      latitude,
+        longitude:     longitude,
       );
 
       // 202 = nouveau prestataire, profil incomplet

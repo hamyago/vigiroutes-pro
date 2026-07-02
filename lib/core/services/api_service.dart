@@ -117,6 +117,8 @@ class ApiService {
     String? fcmToken,
     List<String>? serviceTypes,
     String? sector,
+    double? latitude,
+    double? longitude,
   }) async {
     final res = await _dio.post(
       '/auth/provider/login',
@@ -127,6 +129,8 @@ class ApiService {
         if (fcmToken     != null) 'fcm_token':     fcmToken,
         if (serviceTypes != null) 'service_types': serviceTypes,
         if (sector       != null) 'sector':        sector,
+        if (latitude     != null) 'latitude':      latitude,
+        if (longitude    != null) 'longitude':     longitude,
       },
       options: Options(
         validateStatus: (status) => status != null && status < 300,
