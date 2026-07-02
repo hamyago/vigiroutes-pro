@@ -39,6 +39,17 @@ class RealtimeService {
       );
 
       _channel = WebSocketChannel.connect(uri);
+
+      // BUG CORRIGÉ : WebSocketChannel.connect() ne lève PAS l'échec de
+      // connexion (DNS, hôte injoignable, etc.) de façon fiable via
+      // stream.listen(onError: ...) — c'est un problème connu du package.
+      // Sans ce `await ... .ready`, une simple coupure réseau/DNS
+      // ("Failed host lookup") remontait comme exception NON rattrapée
+      // jusqu'au gestionnaire d'erreur global de l'app -> crash -> retour
+      // au splashscreen (280 occurrences en 7 jours pour un seul
+      // utilisateur avant ce correctif).
+      await _channel!.ready;
+
       _connected = true;
 
       _channel!.stream.listen(
@@ -53,6 +64,7 @@ class RealtimeService {
       debugPrint('[WS] Connecté à Reverb');
     } catch (e) {
       debugPrint('[WS] Erreur connexion : $e');
+      _connected = false;
       _scheduleReconnect();
     }
   }
