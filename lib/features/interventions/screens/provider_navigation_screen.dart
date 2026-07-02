@@ -212,7 +212,14 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                         )),
                         const SizedBox(width: 10),
                         Expanded(child: ElevatedButton.icon(
-                          onPressed: () => ctrl.startIntervention(i.id),
+                          onPressed: () async {
+                            final ok = await ctrl.startIntervention(i.id);
+                            if (!ok && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(ctrl.actionError ??
+                                      'Erreur lors du démarrage.')));
+                            }
+                          },
                           icon: const Icon(Icons.build, size: 16),
                           label: const Text('Démarrer'),
                           style: ElevatedButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -238,8 +245,15 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                               ),
                             );
                             if (ok == true) {
-                              await ctrl.completeIntervention(i.id);
-                              if (context.mounted) context.go('/provider/home');
+                              final success = await ctrl.completeIntervention(i.id);
+                              if (!context.mounted) return;
+                              if (success) {
+                                context.go('/provider/home');
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(ctrl.actionError ??
+                                        'Erreur lors de la finalisation.')));
+                              }
                             }
                           },
                           icon: const Icon(Icons.check_circle, size: 16),

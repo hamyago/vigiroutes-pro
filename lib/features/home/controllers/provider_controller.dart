@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/models/models.dart';
@@ -163,17 +164,49 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  Future<void> startIntervention(String id) async {
-    final data = await _api.startIntervention(id);
-    _upsert(InterventionModel.fromJson(data));
-    notifyListeners();
+  String? _actionError;
+  String? get actionError => _actionError;
+
+  /// AVANT : aucun try/catch ici. La moindre erreur reseau/backend lors du
+  /// clic sur "Demarrer" plantait l'app entiere (exception non rattrapee
+  /// remontant jusqu'au handler global -> crash -> retour splashscreen).
+  Future<bool> startIntervention(String id) async {
+    _actionError = null;
+    try {
+      final data = await _api
+          .startIntervention(id)
+          .timeout(const Duration(seconds: 20));
+      _upsert(InterventionModel.fromJson(data));
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[ProviderController] startIntervention error: $e');
+      FirebaseCrashlytics.instance.log('[ProviderController] startIntervention error: $e');
+      _actionError = 'Impossible de démarrer l\'intervention. Réessayez.';
+      notifyListeners();
+      return false;
+    }
   }
 
-  Future<void> completeIntervention(String id) async {
-    final data = await _api.completeIntervention(id);
-    _upsert(InterventionModel.fromJson(data));
-    _isAvailable = true;
-    notifyListeners();
+  /// Meme correctif : aucune protection avant, meme symptome que
+  /// startIntervention (crash au clic sur "Terminer").
+  Future<bool> completeIntervention(String id) async {
+    _actionError = null;
+    try {
+      final data = await _api
+          .completeIntervention(id)
+          .timeout(const Duration(seconds: 20));
+      _upsert(InterventionModel.fromJson(data));
+      _isAvailable = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[ProviderController] completeIntervention error: $e');
+      FirebaseCrashlytics.instance.log('[ProviderController] completeIntervention error: $e');
+      _actionError = 'Impossible de terminer l\'intervention. Réessayez.';
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> declineIntervention(String id) async {
