@@ -116,6 +116,7 @@ class ProviderModel {
 class InterventionModel {
   final String id;
   final String userId;
+  final String? userName;
   final String? providerId;
   final String serviceTypeId;
   final String serviceTypeName;
@@ -145,6 +146,7 @@ class InterventionModel {
   const InterventionModel({
     required this.id,
     required this.userId,
+    this.userName,
     this.providerId,
     required this.serviceTypeId,
     required this.serviceTypeName,
@@ -182,6 +184,8 @@ class InterventionModel {
   factory InterventionModel.fromJson(Map<String, dynamic> json) => InterventionModel(
         id:                          json['id'] as String,
         userId:                      json['user_id'] as String,
+        userName:                    json['user_name'] as String? ??
+            (json['user'] as Map<String, dynamic>?)?['name'] as String?,
         providerId:                  json['provider_id'] as String?,
         serviceTypeId:               json['service_type_id'] as String,
         serviceTypeName:             json['service_type_name'] as String,
@@ -217,6 +221,7 @@ class InterventionModel {
   InterventionModel copyWithWs(Map<String, dynamic> data) => InterventionModel(
         id:                          id,
         userId:                      userId,
+        userName:                    userName,
         providerId:                  data['provider_id'] as String? ?? providerId,
         serviceTypeId:               serviceTypeId,
         serviceTypeName:             serviceTypeName,

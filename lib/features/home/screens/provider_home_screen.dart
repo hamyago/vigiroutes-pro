@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../home/controllers/provider_controller.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/models/models.dart';
 import '../../../core/utils/price_calculator.dart';
 import '../../../shared/widgets/provider_bottom_nav.dart';
 
@@ -256,7 +257,7 @@ class _StatCard extends StatelessWidget {
 }
 
 class _ActiveInterventionCard extends StatelessWidget {
-  final dynamic intervention;
+  final InterventionModel intervention;
   final ProviderController ctrl;
   const _ActiveInterventionCard(
       {required this.intervention, required this.ctrl});
