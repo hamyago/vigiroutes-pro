@@ -20,30 +20,30 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _formKey   = GlobalKey<FormState>();
   final _locationService = LocationService();
 
-  final Set<String> _selectedServices = {};
   String? _selectedSector;
   bool _loadingLocation = false;
   double? _lat, _lng;
 
-  // Services proposés (ids alignés sur le catalogue client /service-types).
-  // Le prestataire peut en cocher PLUSIEURS.
-  static const _services = [
-    {'value': 'depannage',   'label': '🔧 Dépannage'},
-    {'value': 'pneu',        'label': '🔩 Pneu (crevaison)'},
-    {'value': 'remorquage',  'label': '🚛 Remorquage'},
-    {'value': 'electricite', 'label': '⚡ Électricité auto'},
-  ];
-
-  // Secteur d'activité : catégorie MÉTIER unique du prestataire, distincte des
-  // services cochés ci-dessus. C'est cette valeur que le backend stocke dans
-  // la colonne `sector` (enum). ⚠️ Vérifie que ces 4 slugs correspondent
-  // exactement à l'enum défini côté Laravel (migration / FormRequest).
+  // Secteur d'activité : catégorie MÉTIER unique du prestataire (choix
+  // UNIQUE, pas d'option multiple). C'est cette valeur que le backend
+  // stocke dans la colonne `sector` (enum). ⚠️ Vérifie que ces 4 slugs
+  // correspondent exactement à l'enum défini côté Laravel.
   static const _sectors = [
     {'value': 'vulcanisateur',   'label': '🔩 Vulcanisateur'},
     {'value': 'mecanicien',      'label': '🔧 Mécanicien'},
     {'value': 'remorqueur',      'label': '🚛 Remorqueur'},
     {'value': 'electricien_auto','label': '⚡ Électricien Auto'},
   ];
+
+  // Un secteur = UN SEUL service côté catalogue client (/service-types).
+  // Le prestataire ne choisit plus ses services séparément : ils découlent
+  // automatiquement de son secteur unique.
+  static const _serviceBySector = {
+    'vulcanisateur':    'pneu',
+    'mecanicien':       'depannage',
+    'remorqueur':       'remorquage',
+    'electricien_auto': 'electricite',
+  };
 
   @override
   void dispose() {
@@ -72,12 +72,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       );
       return;
     }
-    if (_selectedServices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sélectionnez au moins un service.')),
-      );
-      return;
-    }
     if (_lat == null) {
       await _getLocation();
       if (_lat == null && mounted) {
@@ -92,7 +86,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       name:         _nameCtrl.text.trim(),
       phone:        _phoneCtrl.text.trim(),
       sector:       _selectedSector!,
-      serviceTypes: _selectedServices.toList(),
+      serviceTypes: [_serviceBySector[_selectedSector!]!],
       latitude:     _lat!,
       longitude:    _lng!,
     );
@@ -182,55 +176,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
                             color: selected ? AppColors.primaryDark : AppColors.border,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (selected) ...[
-                              const Icon(Icons.check, size: 16, color: Colors.white),
-                              const SizedBox(width: 6),
-                            ],
-                            Text(
-                              s['label']!,
-                              style: TextStyle(
-                                color: selected ? Colors.white : AppColors.textPrimary,
-                                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Services proposés (un ou plusieurs)',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _services.map((s) {
-                    final selected = _selectedServices.contains(s['value']);
-                    return GestureDetector(
-                      onTap: () => setState(() {
-                        if (selected) {
-                          _selectedServices.remove(s['value']);
-                        } else {
-                          _selectedServices.add(s['value']!);
-                        }
-                      }),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: selected ? AppColors.primary : AppColors.surfaceVariant,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: selected ? AppColors.primary : AppColors.border,
                           ),
                         ),
                         child: Row(
