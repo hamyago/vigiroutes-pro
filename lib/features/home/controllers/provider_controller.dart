@@ -209,11 +209,23 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  Future<void> declineIntervention(String id) async {
-    ProviderAlertService.instance.stop();
-    await _api.cancelIntervention(id);
-    _pendingDispatch = null;
-    notifyListeners();
+  /// Meme correctif que startIntervention/completeIntervention : aucune
+  /// protection avant, meme symptome (crash au clic sur "Refuser").
+  Future<bool> declineIntervention(String id) async {
+    _actionError = null;
+    try {
+      ProviderAlertService.instance.stop();
+      await _api.cancelIntervention(id).timeout(const Duration(seconds: 20));
+      _pendingDispatch = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[ProviderController] declineIntervention error: $e');
+      FirebaseCrashlytics.instance.log('[ProviderController] declineIntervention error: $e');
+      _actionError = 'Impossible de refuser cette demande. Réessayez.';
+      notifyListeners();
+      return false;
+    }
   }
 
   void _upsert(InterventionModel updated) {

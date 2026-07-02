@@ -189,12 +189,24 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                     .map((req) => _RequestCard(
                           request: req,
                           onAccept: () async {
-                            await ctrl.acceptIntervention(req.id);
-                            if (context.mounted) {
+                            final ok = await ctrl.acceptIntervention(req.id);
+                            if (!context.mounted) return;
+                            if (ok) {
                               context.push('/provider/navigation/${req.id}');
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(ctrl.actionError ??
+                                      'Erreur lors de l\'acceptation.')));
                             }
                           },
-                          onDecline: () => ctrl.declineIntervention(req.id),
+                          onDecline: () async {
+                            final ok = await ctrl.declineIntervention(req.id);
+                            if (!ok && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(ctrl.actionError ??
+                                      'Erreur lors du refus.')));
+                            }
+                          },
                         ))
                     ,
             ],

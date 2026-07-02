@@ -187,6 +187,7 @@ class _InterventionTileState extends State<_InterventionTile> {
 
   (String, Color) _statusInfo(String status) => switch (status) {
     'pending'     => ('En attente', AppColors.warning),
+    'dispatching' => ('Envoyée',    AppColors.warning),
     'accepted'    => ('Acceptée',   AppColors.primary),
     'in_progress' => ('En cours',   AppColors.success),
     'completed'   => ('Terminée',   AppColors.success),
