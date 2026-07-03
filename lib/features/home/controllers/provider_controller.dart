@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/models/models.dart';
@@ -22,6 +23,7 @@ class ProviderController extends ChangeNotifier {
 
   StreamSubscription<Position>? _locationSub;
   StreamSubscription?           _wsSub;
+  StreamSubscription<RemoteMessage>? _fcmSub;
 
   ProviderModel?          get provider          => _provider;
   List<InterventionModel> get myInterventions   => _myInterventions;
@@ -66,6 +68,36 @@ class ProviderController extends ChangeNotifier {
     _loadInterventions();
     _startLocationUpdates();
     _subscribeWebSocket();
+    _subscribeFcm();
+  }
+
+  // BUG CORRIGÉ : aucun gestionnaire n'existait pour les notifications FCM
+  // reçues pendant que l'app est au premier plan (et _bgHandler dans
+  // main.dart ne fait rien). Android affiche la notification système, mais
+  // rien ne déclenchait l'alarme sonore/vocale interne (ProviderAlertService
+  // ne joue jamais de son via le canal de notification Android — c'est un
+  // lecteur audio + TTS entièrement côté Dart) ni ne rafraîchissait la
+  // liste des demandes en attente. Redondant avec le WebSocket par
+  // sécurité tant que sa fiabilité n'est pas confirmée.
+  void _subscribeFcm() {
+    _fcmSub = FirebaseMessaging.onMessage.listen((message) {
+      final type = message.data['type'];
+      if (type != 'dispatch_alert') return;
+
+      final interventionId = message.data['intervention_id'] as String?;
+      final serviceType    = message.data['service_type'] as String?;
+      if (interventionId == null) return;
+
+      debugPrint('[ProviderController] FCM dispatch_alert reçu: $interventionId');
+
+      ProviderAlertService.instance.newOrder(
+        dispatchId:  interventionId,
+        serviceName: serviceType,
+      );
+
+      // Rafraîchir pour faire apparaître la nouvelle demande immédiatement.
+      _loadInterventions();
+    });
   }
 
   Future<void> _loadInterventions() async {
@@ -269,6 +301,7 @@ class ProviderController extends ChangeNotifier {
   void dispose() {
     _wsSub?.cancel();
     _locationSub?.cancel();
+    _fcmSub?.cancel();
     super.dispose();
   }
 }
