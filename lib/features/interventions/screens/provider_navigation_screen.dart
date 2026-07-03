@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
@@ -12,6 +11,14 @@ import '../../../core/utils/price_calculator.dart';
 import '../../home/controllers/provider_controller.dart';
 import '../../auth/controllers/auth_controller.dart';
 
+/// AVANT : cet écran embarquait un widget GoogleMap natif avec marqueurs
+/// client/prestataire, qui faisait planter l'app (retour au splashscreen)
+/// à l'ouverture. Plutôt que de continuer à deviner la cause exacte côté
+/// SDK Maps natif (non diagnosticable sans device physique), on retire
+/// complètement la carte intégrée : la navigation réelle passe par
+/// l'app Google Maps externe (déjà en place via _openNavigation), qui le
+/// fait de toute façon mieux qu'une carte intégrée statique. Ça élimine
+/// toute la surface de plantage liée au rendu natif de la carte ici.
 class ProviderNavigationScreen extends StatefulWidget {
   final String interventionId;
   const ProviderNavigationScreen({super.key, required this.interventionId});
@@ -24,9 +31,9 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
   final _api      = ApiService.instance;
   final _realtime = RealtimeService.instance;
 
-  GoogleMapController? _mapCtrl;
-  InterventionModel?   _intervention;
-  StreamSubscription?  _wsSub;
+  InterventionModel?  _intervention;
+  StreamSubscription? _wsSub;
+  bool                _loadError = false;
 
   @override
   void initState() {
@@ -37,17 +44,23 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
 
   Future<void> _loadIntervention() async {
     try {
-      final data = await _api.getIntervention(widget.interventionId);
-      if (mounted) setState(() => _intervention = InterventionModel.fromJson(data));
-      _fitCamera();
+      final data = await _api
+          .getIntervention(widget.interventionId)
+          .timeout(const Duration(seconds: 20));
+      if (mounted) {
+        setState(() {
+          _intervention = InterventionModel.fromJson(data);
+          _loadError = false;
+        });
+      }
     } catch (e) {
       debugPrint('[NavScreen] Erreur chargement : $e');
+      if (mounted) setState(() => _loadError = true);
     }
   }
 
   void _subscribeToUpdates() {
     final providerId = context.read<AuthController>().provider?.id ?? '';
-    // Écouter les mises à jour via WebSocket (remplace watchIntervention Firestore)
     _wsSub = _realtime.subscribeToDispatch(providerId)
         .where((data) => data['id'] == widget.interventionId)
         .listen((data) {
@@ -56,63 +69,13 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
             _intervention = _intervention?.copyWithWs(data)
                 ?? InterventionModel.fromJson(data);
           });
-          _fitCamera();
         });
-  }
-
-  void _fitCamera() {
-    final i = _intervention;
-    if (i == null || _mapCtrl == null) return;
-    _mapCtrl!.animateCamera(CameraUpdate.newLatLngBounds(
-      _bounds(LatLng(i.userLatitude, i.userLongitude),
-          i.providerLatitude != null ? LatLng(i.providerLatitude!, i.providerLongitude!) : null),
-      60,
-    ));
   }
 
   @override
   void dispose() {
     _wsSub?.cancel();
-    _mapCtrl?.dispose();
     super.dispose();
-  }
-
-  LatLngBounds _bounds(LatLng a, LatLng? b) {
-    if (b == null) return LatLngBounds(
-      southwest: LatLng(a.latitude - 0.01, a.longitude - 0.01),
-      northeast: LatLng(a.latitude + 0.01, a.longitude + 0.01),
-    );
-    return LatLngBounds(
-      southwest: LatLng(
-        a.latitude  < b.latitude  ? a.latitude  - 0.005 : b.latitude  - 0.005,
-        a.longitude < b.longitude ? a.longitude - 0.005 : b.longitude - 0.005,
-      ),
-      northeast: LatLng(
-        a.latitude  > b.latitude  ? a.latitude  + 0.005 : b.latitude  + 0.005,
-        a.longitude > b.longitude ? a.longitude + 0.005 : b.longitude + 0.005,
-      ),
-    );
-  }
-
-  Set<Marker> get _markers {
-    final markers = <Marker>{};
-    final i = _intervention;
-    if (i == null) return markers;
-    markers.add(Marker(
-      markerId: const MarkerId('user'),
-      position: LatLng(i.userLatitude, i.userLongitude),
-      infoWindow: InfoWindow(title: '📍 Client', snippet: i.userAddress ?? ''),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-    ));
-    if (i.providerLatitude != null && i.providerLongitude != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('provider'),
-        position: LatLng(i.providerLatitude!, i.providerLongitude!),
-        infoWindow: const InfoWindow(title: '🔧 Ma position'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-      ));
-    }
-    return markers;
   }
 
   Future<void> _openNavigation() async {
@@ -129,182 +92,192 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
     final ctrl = context.read<ProviderController>();
 
     return Scaffold(
-      body: Stack(children: [
-        // ── Carte ────────────────────────────────────────────────────────────
-        GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: i != null ? LatLng(i.userLatitude, i.userLongitude) : const LatLng(5.3599517, -4.0082563),
-            zoom: 14,
-          ),
-          onMapCreated: (c) {
-            _mapCtrl = c;
-            Future.delayed(const Duration(milliseconds: 500), _fitCamera);
-          },
-          markers: _markers,
-          myLocationEnabled: true,
-          myLocationButtonEnabled: true,
-          zoomControlsEnabled: false,
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
+          onPressed: () => context.go('/provider/home'),
         ),
-
-        // ── Barre haute ──────────────────────────────────────────────────────
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(children: [
-              _CircleBtn(icon: Icons.arrow_back_ios_new,
-                  onTap: () => context.go('/provider/home')),
-              const Spacer(),
-              _CircleBtn(icon: Icons.navigation, color: AppColors.primary,
-                  onTap: _openNavigation, tooltip: 'Google Maps'),
-            ]),
-          ),
-        ),
-
-        // ── Panneau bas ──────────────────────────────────────────────────────
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.12), blurRadius: 20)],
+        title: const Text('Intervention',
+            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+        actions: [
+          if (i != null)
+            IconButton(
+              icon: const Icon(Icons.navigation, color: AppColors.primary),
+              tooltip: 'Ouvrir Google Maps',
+              onPressed: _openNavigation,
             ),
-            child: i == null
-                ? const Center(child: CircularProgressIndicator())
-                : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    _StatusChip(status: i.status),
-                    const SizedBox(height: 14),
-                    Row(children: [
-                      Container(
-                        width: 44, height: 44,
-                        decoration: BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
-                        child: const Center(child: Text('👤', style: TextStyle(fontSize: 22))),
+        ],
+      ),
+      body: i == null
+          ? Center(
+              child: _loadError
+                  ? Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline,
+                              color: AppColors.error, size: 48),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Impossible de charger cette intervention.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _loadIntervention,
+                            child: const Text('Réessayer'),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(i.provider?.name ?? 'Client',
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                        Text('${i.serviceTypeName} — ${PriceCalculator.formatFcfa(i.totalPrice)}',
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                        if (i.userAddress != null)
-                          Text(i.userAddress!,
-                              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ])),
-                    ]),
-                    const SizedBox(height: 16),
-                    const Divider(height: 1),
-                    const SizedBox(height: 16),
+                    )
+                  : const CircularProgressIndicator(),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatusChip(status: i.status),
+                  const SizedBox(height: 20),
 
-                    if (i.isAccepted)
+                  // ── Carte info client + service ──────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10),
+                      ],
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
-                        Expanded(child: OutlinedButton.icon(
-                          onPressed: _openNavigation,
-                          icon: const Icon(Icons.navigation, size: 16),
-                          label: const Text('Naviguer'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primary,
-                            side: const BorderSide(color: AppColors.primary),
-                            minimumSize: const Size(0, 44),
-                          ),
-                        )),
-                        const SizedBox(width: 10),
-                        Expanded(child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final ok = await ctrl.startIntervention(i.id);
-                            if (!ok && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text(ctrl.actionError ??
-                                      'Erreur lors du démarrage.')));
-                            }
-                          },
-                          icon: const Icon(Icons.build, size: 16),
-                          label: const Text('Démarrer'),
-                          style: ElevatedButton.styleFrom(minimumSize: const Size(0, 44)),
-                        )),
+                        Container(
+                          width: 46, height: 46,
+                          decoration: const BoxDecoration(
+                              color: AppColors.primaryLight, shape: BoxShape.circle),
+                          child: const Center(child: Text('👤', style: TextStyle(fontSize: 22))),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          // BUG CORRIGÉ : affichait i.provider?.name (le nom
+                          // du prestataire lui-même) au lieu du client.
+                          Text(i.userName ?? 'Client',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                          Text('${i.serviceTypeName} — ${PriceCalculator.formatFcfa(i.totalPrice)}',
+                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        ])),
                       ]),
+                      if (i.userAddress != null) ...[
+                        const SizedBox(height: 12),
+                        const Divider(height: 1),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 18, color: AppColors.textMuted),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(i.userAddress!,
+                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
+                        ]),
+                      ],
+                    ]),
+                  ),
 
-                    if (i.isInProgress)
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                title: const Text('Terminer l\'intervention ?'),
-                                content: const Text('Le paiement sera déclenché.'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false),
-                                      child: const Text('Non')),
-                                  ElevatedButton(onPressed: () => Navigator.pop(context, true),
-                                      child: const Text('Oui, terminer')),
-                                ],
-                              ),
-                            );
-                            if (ok == true) {
-                              final success = await ctrl.completeIntervention(i.id);
-                              if (!context.mounted) return;
-                              if (success) {
-                                context.go('/provider/home');
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text(ctrl.actionError ??
-                                        'Erreur lors de la finalisation.')));
-                              }
-                            }
-                          },
-                          icon: const Icon(Icons.check_circle, size: 16),
-                          label: const Text('Terminer l\'intervention'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.success,
-                            minimumSize: const Size(0, 48),
-                          ),
+                  const SizedBox(height: 16),
+
+                  // ── Bouton navigation externe (principal) ────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openNavigation,
+                      icon: const Icon(Icons.navigation),
+                      label: const Text('Ouvrir l\'itinéraire dans Google Maps'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                        minimumSize: const Size(0, 48),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ── Actions selon le statut ───────────────────────────────
+                  if (i.isAccepted)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final ok = await ctrl.startIntervention(i.id);
+                          if (!ok && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(ctrl.actionError ??
+                                    'Erreur lors du démarrage.')));
+                          }
+                        },
+                        icon: const Icon(Icons.build, size: 18),
+                        label: const Text('Démarrer l\'intervention'),
+                        style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
+                      ),
+                    ),
+
+                  if (i.isInProgress)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Terminer l\'intervention ?'),
+                              content: const Text('Le paiement sera déclenché.'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Non')),
+                                ElevatedButton(onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('Oui, terminer')),
+                              ],
+                            ),
+                          );
+                          if (ok != true) return;
+                          final success = await ctrl.completeIntervention(i.id);
+                          if (!context.mounted) return;
+                          if (success) {
+                            context.go('/provider/home');
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(ctrl.actionError ??
+                                    'Erreur lors de la finalisation.')));
+                          }
+                        },
+                        icon: const Icon(Icons.check_circle, size: 18),
+                        label: const Text('Terminer l\'intervention'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          minimumSize: const Size(0, 48),
                         ),
                       ),
+                    ),
 
-                    if (i.isCompleted)
-                      Center(child: Column(children: [
-                        const Text('✅ Intervention terminée !',
-                            style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600)),
-                        TextButton(
-                          onPressed: () => context.go('/provider/home'),
-                          child: const Text('Retour à l\'accueil'),
-                        ),
-                      ])),
-                  ]),
-          ),
-        ),
-      ]),
+                  if (i.isCompleted)
+                    Center(child: Column(children: [
+                      const SizedBox(height: 20),
+                      const Text('✅ Intervention terminée !',
+                          style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600)),
+                      TextButton(
+                        onPressed: () => context.go('/provider/home'),
+                        child: const Text('Retour à l\'accueil'),
+                      ),
+                    ])),
+                ],
+              ),
+            ),
     );
   }
-}
-
-class _CircleBtn extends StatelessWidget {
-  final IconData icon;
-  final Color? color;
-  final VoidCallback onTap;
-  final String? tooltip;
-  const _CircleBtn({required this.icon, required this.onTap, this.color, this.tooltip});
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-        message: tooltip ?? '',
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: 42, height: 42,
-            decoration: BoxDecoration(
-              color: color ?? Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.12), blurRadius: 8)],
-            ),
-            child: Icon(icon, size: 18, color: color != null ? Colors.white : Colors.black87),
-          ),
-        ),
-      );
 }
 
 class _StatusChip extends StatelessWidget {
@@ -314,11 +287,13 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (status) {
-      'accepted'    => ('En route vers le client', AppColors.primary,  '🚗'),
-      'in_progress' => ('Intervention en cours',   AppColors.success,  '🔧'),
-      'completed'   => ('Intervention terminée',   AppColors.success,  '✅'),
-      'cancelled'   => ('Annulée',                 AppColors.error,    '❌'),
-      _             => ('En attente',              AppColors.warning,  '⏳'),
+      'pending'     => ('En attente',              AppColors.warning, '⏳'),
+      'dispatching' => ('Envoyée au client',        AppColors.warning, '📨'),
+      'accepted'    => ('En route vers le client',  AppColors.primary, '🚗'),
+      'in_progress' => ('Intervention en cours',    AppColors.success, '🔧'),
+      'completed'   => ('Intervention terminée',    AppColors.success, '✅'),
+      'cancelled'   => ('Annulée',                  AppColors.error,   '❌'),
+      _             => ('En attente',               AppColors.warning, '⏳'),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

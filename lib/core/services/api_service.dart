@@ -190,7 +190,10 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getIntervention(String id) async {
-    final res = await get('/user/interventions/$id');
+    // BUG CORRIGÉ : appelait /user/interventions/$id (endpoint CLIENT,
+    // protégé par un middleware qui exige un token User, pas Provider) —
+    // échouait systématiquement pour un prestataire.
+    final res = await get('/provider/interventions/$id');
     return res.data as Map<String, dynamic>;
   }
 
