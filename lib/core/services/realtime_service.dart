@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -179,8 +180,29 @@ class RealtimeService {
       return;
     }
 
-    if (_socketId == null || _token == null) {
-      debugPrint('[WS] Abonnement à $channel différé (socket_id/token pas encore prêts)');
+    if (_socketId == null) {
+      debugPrint('[WS] Abonnement à $channel différé (socket_id pas encore prêt)');
+      return;
+    }
+
+    // BUG CORRIGÉ : utilisait _token, un jeton Firebase figé au moment du
+    // login (jamais rafraîchi ensuite) — les jetons Firebase expirent au
+    // bout d'1h. Résultat : 401 systématique sur /broadcasting/auth dès
+    // que le jeton avait expiré, confirmé dans les logs nginx (requêtes
+    // bien envoyées, toujours rejetées en 401), alors que les autres
+    // appels API fonctionnaient normalement car ApiService, lui,
+    // redemande un jeton frais à Firebase à CHAQUE requête. On applique
+    // maintenant le même principe ici.
+    String? freshToken;
+    try {
+      freshToken = await firebase_auth.FirebaseAuth.instance.currentUser
+          ?.getIdToken(false);
+    } catch (e) {
+      debugPrint('[WS] Impossible de rafraîchir le jeton Firebase : $e');
+    }
+    freshToken ??= _token;
+    if (freshToken == null) {
+      debugPrint('[WS] Abonnement à $channel différé (aucun jeton disponible)');
       return;
     }
 
@@ -192,7 +214,7 @@ class RealtimeService {
           'channel_name': channel,
         },
         options: Options(
-          headers: {'Authorization': 'Bearer $_token'},
+          headers: {'Authorization': 'Bearer $freshToken'},
           contentType: 'application/json',
         ),
       );
