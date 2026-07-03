@@ -65,9 +65,15 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
         .where((data) => data['id'] == widget.interventionId)
         .listen((data) {
           if (!mounted) return;
+          // BUG CORRIGÉ : le payload WS ne contient qu'un sous-ensemble des
+          // champs. Le repli InterventionModel.fromJson(data) sur ce
+          // payload partiel plantait (champs obligatoires absents, ex.
+          // user_id) si un message WS arrivait avant la fin du chargement
+          // REST initial. On ignore simplement la mise à jour dans ce cas
+          // rare — le chargement REST (déjà en cours) prendra le relais.
+          if (_intervention == null) return;
           setState(() {
-            _intervention = _intervention?.copyWithWs(data)
-                ?? InterventionModel.fromJson(data);
+            _intervention = _intervention!.copyWithWs(data);
           });
         });
   }
