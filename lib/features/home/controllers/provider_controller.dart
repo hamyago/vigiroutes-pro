@@ -118,16 +118,38 @@ class ProviderController extends ChangeNotifier {
   // ── GPS continu ───────────────────────────────────────────────────────────
 
   void _startLocationUpdates() {
-    _locationSub = _location.positionStream().listen((pos) async {
-      if (_provider == null) return;
-      await _api.updateGlobalLocation(pos.latitude, pos.longitude);
+    _locationSub = _location.positionStream().listen(
+      (pos) async {
+        if (_provider == null) return;
+        // BUG CRITIQUE CORRIGÉ : ce listener se déclenche à chaque mise à
+        // jour GPS (potentiellement plusieurs fois par minute), en tâche de
+        // fond, sans lien avec une action de l'utilisateur. Sans try/catch,
+        // la moindre erreur serveur (même transitoire, ex: 500 ponctuel)
+        // plantait l'app à N'IMPORTE QUEL MOMENT, y compris en pleine
+        // intervention — le pire endroit possible pour un crash silencieux.
+        try {
+          await _api.updateGlobalLocation(pos.latitude, pos.longitude);
 
-      // Mettre aussi à jour la position dans l'intervention active
-      final active = activeIntervention;
-      if (active != null) {
-        await _api.updateProviderLocation(active.id, pos.latitude, pos.longitude);
-      }
-    });
+          // Mettre aussi à jour la position dans l'intervention active
+          final active = activeIntervention;
+          if (active != null) {
+            await _api.updateProviderLocation(active.id, pos.latitude, pos.longitude);
+          }
+        } catch (e) {
+          debugPrint('[ProviderController] Erreur mise à jour position : $e');
+          // Volontairement silencieux : un ping GPS manqué n'est pas assez
+          // grave pour interrompre le prestataire ou afficher une erreur —
+          // le prochain ping (quelques secondes plus tard) réessaiera.
+        }
+      },
+      onError: (e) {
+        // Le FLUX GPS natif lui-même peut émettre une erreur (permission
+        // révoquée en cours de route, service localisation coupé) — sans
+        // ce handler, ça échapperait au try/catch ci-dessus et planterait
+        // l'app pareil.
+        debugPrint('[ProviderController] Erreur flux position : $e');
+      },
+    );
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
