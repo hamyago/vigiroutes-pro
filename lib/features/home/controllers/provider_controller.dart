@@ -168,10 +168,13 @@ class ProviderController extends ChangeNotifier {
 
   Future<bool> acceptIntervention(String id) async {
     _isLoading = true;
+    _actionError = null;
     ProviderAlertService.instance.stop();
     notifyListeners();
     try {
-      final data    = await _api.acceptIntervention(id);
+      final data    = await _api
+          .acceptIntervention(id)
+          .timeout(const Duration(seconds: 30));
       final updated = InterventionModel.fromJson(data);
       _upsert(updated);
       _pendingDispatch = null;
@@ -180,6 +183,12 @@ class ProviderController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('[ProviderController] acceptIntervention error: $e');
+      FirebaseCrashlytics.instance.log('[ProviderController] acceptIntervention error: $e');
+      // BUG CORRIGÉ : ne définissait jamais _actionError, donc l'UI
+      // affichait un message resté d'une précédente action (ex: "Impossible
+      // de refuser cette demande" au clic sur "Accepter").
+      _actionError = 'Impossible d\'accepter cette demande. Réessayez.';
       _isLoading = false;
       notifyListeners();
       return false;
