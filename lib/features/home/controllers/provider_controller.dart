@@ -24,6 +24,7 @@ class ProviderController extends ChangeNotifier {
   StreamSubscription<Position>? _locationSub;
   StreamSubscription?           _wsSub;
   StreamSubscription<RemoteMessage>? _fcmSub;
+  Timer?                        _pollTimer;
 
   ProviderModel?          get provider          => _provider;
   List<InterventionModel> get myInterventions   => _myInterventions;
@@ -69,6 +70,44 @@ class ProviderController extends ChangeNotifier {
     _startLocationUpdates();
     _subscribeWebSocket();
     _subscribeFcm();
+    _startPolling();
+  }
+
+  // ── Rafraîchissement automatique par sondage (secours) ──────────────────
+  // AJOUTÉ : malgré plusieurs corrections successives (auth de canal,
+  // jeton Firebase périmé...), la fiabilité du WebSocket en conditions
+  // réelles n'a pas pu être confirmée. Ce sondage toutes les 4s repose
+  // uniquement sur les endpoints REST, dont le bon fonctionnement a été
+  // vérifié à de multiples reprises tout au long des sessions de debug -
+  // garantie de secours simple, robuste, et qui ne dépend d'aucune
+  // configuration WebSocket/Reverb. Tourne EN PLUS du WebSocket (les deux
+  // ne se gênent pas).
+  void _startPolling() {
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _pollForUpdates(),
+    );
+  }
+
+  Future<void> _pollForUpdates() async {
+    final previousPendingIds = pendingRequests.map((r) => r.id).toSet();
+    await _loadInterventions();
+    final newPendingIds = pendingRequests.map((r) => r.id).toSet();
+
+    // Ne déclencher l'alarme QUE pour une demande qui vient d'apparaître
+    // (pas à chaque sondage, sinon elle sonnerait toutes les 4s en boucle).
+    final freshlyArrived = newPendingIds.difference(previousPendingIds);
+    if (freshlyArrived.isNotEmpty) {
+      final id = freshlyArrived.first;
+      final match = _myInterventions.where((i) => i.id == id);
+      if (match.isNotEmpty) {
+        debugPrint('[ProviderController] Nouvelle demande détectée par sondage: $id');
+        ProviderAlertService.instance.newOrder(
+          dispatchId:  id,
+          serviceName: match.first.serviceTypeName,
+        );
+      }
+    }
   }
 
   // BUG CORRIGÉ : aucun gestionnaire n'existait pour les notifications FCM
@@ -302,6 +341,7 @@ class ProviderController extends ChangeNotifier {
     _wsSub?.cancel();
     _locationSub?.cancel();
     _fcmSub?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 }
