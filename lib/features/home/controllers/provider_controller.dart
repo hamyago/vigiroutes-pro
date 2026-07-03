@@ -175,7 +175,7 @@ class ProviderController extends ChangeNotifier {
     try {
       final data = await _api
           .startIntervention(id)
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 30));
       _upsert(InterventionModel.fromJson(data));
       notifyListeners();
       return true;
@@ -195,7 +195,7 @@ class ProviderController extends ChangeNotifier {
     try {
       final data = await _api
           .completeIntervention(id)
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 30));
       _upsert(InterventionModel.fromJson(data));
       _isAvailable = true;
       notifyListeners();
@@ -215,7 +215,7 @@ class ProviderController extends ChangeNotifier {
     _actionError = null;
     try {
       ProviderAlertService.instance.stop();
-      await _api.cancelIntervention(id).timeout(const Duration(seconds: 20));
+      await _api.cancelIntervention(id).timeout(const Duration(seconds: 30));
       _pendingDispatch = null;
       notifyListeners();
       return true;

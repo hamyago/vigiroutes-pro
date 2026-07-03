@@ -46,7 +46,7 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
     try {
       final data = await _api
           .getIntervention(widget.interventionId)
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 30));
       if (mounted) {
         setState(() {
           _intervention = InterventionModel.fromJson(data);
