@@ -253,7 +253,12 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                           final success = await ctrl.completeIntervention(i.id);
                           if (!context.mounted) return;
                           if (success) {
-                            context.go('/provider/home');
+                            // BUG CORRIGÉ : naviguait direct vers l'accueil,
+                            // sans jamais laisser voir le bouton "Noter le
+                            // client" (qui ne s'affiche que si on reste sur
+                            // cet écran). On va maintenant directement à
+                            // l'écran de notation.
+                            context.go('/provider/review/${i.id}');
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                 content: Text(ctrl.actionError ??

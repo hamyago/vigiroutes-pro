@@ -4,9 +4,21 @@ import '../../../core/models/models.dart';
 import '../../auth/controllers/auth_controller.dart';
 
 /// Écran « Informations sur le prestataire » : récapitulatif lisible du profil.
-class ProviderInfoScreen extends StatelessWidget {
+///
+/// BUG CORRIGÉ : AuthController.provider est chargé une seule fois au
+/// login et jamais rafraîchi automatiquement — la note (moyenne calculée
+/// côté serveur à partir des avis reçus) restait donc figée à sa valeur
+/// du login, même après qu'un client ait laissé un nouvel avis.
+/// AuthController.refreshProvider() existait déjà mais n'était jamais
+/// appelé depuis cet écran.
+class ProviderInfoScreen extends StatefulWidget {
   const ProviderInfoScreen({super.key});
 
+  @override
+  State<ProviderInfoScreen> createState() => _ProviderInfoScreenState();
+}
+
+class _ProviderInfoScreenState extends State<ProviderInfoScreen> {
   static const _serviceLabels = {
     'depannage': '🔧 Dépannage',
     'pneu': '🔩 Pneu',
@@ -14,13 +26,46 @@ class ProviderInfoScreen extends StatelessWidget {
     'electricite': '⚡ Électricité',
   };
 
+  bool _refreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _refreshing = true);
+    await context.read<AuthController>().refreshProvider();
+    if (mounted) setState(() => _refreshing = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final ProviderModel? p = context.watch<AuthController>().provider;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Informations prestataire')),
-      body: p == null
+      appBar: AppBar(
+        title: const Text('Informations prestataire'),
+        actions: [
+          if (_refreshing)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refresh,
+            ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: p == null
           ? const Center(child: Text('Profil indisponible'))
           : ListView(
               padding: const EdgeInsets.all(16),
@@ -100,6 +145,7 @@ class ProviderInfoScreen extends StatelessWidget {
                         : 'Non soumis'),
               ],
             ),
+      ),
     );
   }
 }
