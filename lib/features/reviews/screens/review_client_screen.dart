@@ -90,7 +90,7 @@ class _ReviewClientScreenState extends State<ReviewClientScreen> {
               const Text('Merci pour votre avis !',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 24),
-              CustomButton(
+              AppButton(
                 label: 'Retour à l\'accueil',
                 onPressed: () => context.go('/provider/home'),
               ),
@@ -157,7 +157,7 @@ class _ReviewClientScreenState extends State<ReviewClientScreen> {
               Text(_error!, style: const TextStyle(color: AppColors.error)),
             ],
             const SizedBox(height: 16),
-            CustomButton(
+            AppButton(
               label: 'Envoyer mon avis',
               isLoading: _submitting,
               onPressed: _submit,
