@@ -251,3 +251,32 @@ class InterventionModel {
         provider:    provider,
       );
 }
+
+// ── ReviewModel ──────────────────────────────────────────────────────────────
+// AJOUTÉ : n'existait pas côté Pro (aucun écran d'avis n'existait avant).
+
+class ReviewModel {
+  final String id;
+  final String interventionId;
+  final double rating;
+  final String? comment;
+  final DateTime createdAt;
+
+  const ReviewModel({
+    required this.id,
+    required this.interventionId,
+    required this.rating,
+    this.comment,
+    required this.createdAt,
+  });
+
+  factory ReviewModel.fromJson(Map<String, dynamic> json) => ReviewModel(
+        id:             json['id'] as String,
+        interventionId: json['intervention_id'] as String,
+        rating:         json['rating'] is num
+            ? (json['rating'] as num).toDouble()
+            : double.tryParse(json['rating'].toString()) ?? 0,
+        comment:        json['comment'] as String?,
+        createdAt:      DateTime.parse(json['created_at'] as String),
+      );
+}

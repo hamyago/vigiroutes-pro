@@ -240,6 +240,26 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
+  // AJOUTÉ : aucune méthode n'existait pour voir les avis côté Pro (ni
+  // reçus des clients, ni donnés aux clients).
+  Future<List<dynamic>> getReviews() async {
+    try {
+      final res = await get('/provider/reviews');
+      final d = res.data;
+      if (d is Map && d['data'] is List) return d['data'] as List;
+      return (d as List?) ?? [];
+    } catch (_) { return []; }
+  }
+
+  Future<List<dynamic>> getReviewsGiven() async {
+    try {
+      final res = await get('/provider/reviews/given');
+      final d = res.data;
+      if (d is Map && d['data'] is List) return d['data'] as List;
+      return (d as List?) ?? [];
+    } catch (_) { return []; }
+  }
+
   Future<void> updateProviderLocation(String interventionId, double lat, double lng) =>
       post('/provider/interventions/$interventionId/location', data: {
         'latitude': lat, 'longitude': lng,
