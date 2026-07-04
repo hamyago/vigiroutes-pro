@@ -274,6 +274,12 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                       const SizedBox(height: 20),
                       const Text('✅ Intervention terminée !',
                           style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: () => context.push('/provider/review/${i.id}'),
+                        icon: const Icon(Icons.star_rounded, size: 18),
+                        label: const Text('Noter le client'),
+                      ),
                       TextButton(
                         onPressed: () => context.go('/provider/home'),
                         child: const Text('Retour à l\'accueil'),

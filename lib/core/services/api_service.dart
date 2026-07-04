@@ -220,6 +220,22 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
+  // AJOUTÉ : aucune méthode n'existait pour noter le client après une
+  // intervention terminée — fonctionnalité prévue (cf. le texte déjà
+  // présent côté client "Les prestataires peuvent vous noter après une
+  // intervention") mais jamais implémentée d'aucun côté.
+  Future<Map<String, dynamic>> submitReview({
+    required String interventionId,
+    required int    rating,
+    String?         comment,
+  }) async {
+    final res = await post('/provider/interventions/$interventionId/review', data: {
+      'rating':  rating,
+      if (comment != null && comment.isNotEmpty) 'comment': comment,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<void> updateProviderLocation(String interventionId, double lat, double lng) =>
       post('/provider/interventions/$interventionId/location', data: {
         'latitude': lat, 'longitude': lng,

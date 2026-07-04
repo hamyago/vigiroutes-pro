@@ -9,6 +9,7 @@ import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/profile_setup_screen.dart';
 import '../../features/home/screens/provider_home_screen.dart';
 import '../../features/interventions/screens/provider_navigation_screen.dart';
+import '../../features/reviews/screens/review_client_screen.dart';
 import '../../features/earnings/screens/provider_earnings_screen.dart';
 import '../../features/history/screens/provider_history_screen.dart';
 import '../../features/profile/screens/provider_profile_screen.dart';
@@ -72,6 +73,10 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
 
         GoRoute(path: '/provider/navigation/:id', builder: (ctx, s) =>
             ProviderNavigationScreen(
+                interventionId: s.pathParameters['id']!)),
+
+        GoRoute(path: '/provider/review/:id', builder: (ctx, s) =>
+            ReviewClientScreen(
                 interventionId: s.pathParameters['id']!)),
 
         GoRoute(path: '/provider/subscription', builder: (ctx, s) =>
