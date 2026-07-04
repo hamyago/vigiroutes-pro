@@ -236,21 +236,16 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Terminer l\'intervention ?'),
-                              content: const Text('Le paiement sera déclenché.'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(context, false),
-                                    child: const Text('Non')),
-                                ElevatedButton(onPressed: () => Navigator.pop(context, true),
-                                    child: const Text('Oui, terminer')),
-                              ],
-                            ),
-                          );
-                          if (ok != true) return;
-                          final success = await ctrl.completeIntervention(i.id);
+                          // NOUVEAU : le prestataire doit saisir le montant
+                          // final réellement payé par le client, pré-rempli
+                          // avec l'estimation mais ajustable. C'est ce
+                          // montant qui sert de base à la commission et à
+                          // la déduction du crédit d'abonnement.
+                          final finalAmount = await _askFinalAmount(context, i.totalPrice);
+                          if (finalAmount == null) return; // Annulé.
+
+                          final success = await ctrl.completeIntervention(
+                              i.id, finalAmount: finalAmount);
                           if (!context.mounted) return;
                           if (success) {
                             // BUG CORRIGÉ : naviguait direct vers l'accueil,
@@ -325,4 +320,66 @@ class _StatusChip extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Popup obligatoire avant de terminer une intervention : le prestataire
+/// saisit le montant final réellement payé par le client, pré-rempli avec
+/// l'estimation initiale mais librement ajustable. Retourne null si annulé.
+Future<double?> _askFinalAmount(BuildContext context, double defaultAmount) {
+  final ctrl = TextEditingController(text: defaultAmount.toStringAsFixed(0));
+  String? error;
+
+  return showDialog<double>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setState) => AlertDialog(
+        title: const Text('Montant final de l\'intervention'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Saisissez le montant réellement payé par le client. '
+              'Ce montant sera affiché au client et servira de base au '
+              'calcul de la commission.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: false),
+              decoration: InputDecoration(
+                labelText: 'Montant (FCFA)',
+                suffixText: 'FCFA',
+                border: const OutlineInputBorder(),
+                errorText: error,
+              ),
+              onChanged: (_) {
+                if (error != null) setState(() => error = null);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = double.tryParse(ctrl.text.trim().replaceAll(' ', ''));
+              if (value == null || value < 500) {
+                setState(() => error = 'Montant invalide (minimum 500 FCFA)');
+                return;
+              }
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Confirmer et terminer'),
+          ),
+        ],
+      ),
+    ),
+  );
 }

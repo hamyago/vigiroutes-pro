@@ -215,8 +215,12 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> completeIntervention(String id) async {
-    final res = await post('/provider/interventions/$id/complete');
+  // MODIFIÉ : le prestataire doit désormais saisir le montant final
+  // réellement payé par le client avant de pouvoir terminer.
+  Future<Map<String, dynamic>> completeIntervention(String id, {required double finalAmount}) async {
+    final res = await post('/provider/interventions/$id/complete', data: {
+      'final_amount': finalAmount,
+    });
     return res.data as Map<String, dynamic>;
   }
 
@@ -294,6 +298,18 @@ class ApiService {
 
   Future<Map<String, dynamic>> subscribeProvider(Map<String, dynamic> data) async {
     final res = await post('/provider/subscription/subscribe', data: data);
+    return res.data as Map<String, dynamic>;
+  }
+
+  // NOUVEAU : recharge libre (remplace le choix de formule figée).
+  Future<Map<String, dynamic>> rechargeProvider({
+    required double amount,
+    required String paymentMethod,
+  }) async {
+    final res = await post('/provider/subscription/recharge', data: {
+      'amount':         amount,
+      'payment_method': paymentMethod,
+    });
     return res.data as Map<String, dynamic>;
   }
 }

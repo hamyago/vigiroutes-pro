@@ -292,11 +292,11 @@ class ProviderController extends ChangeNotifier {
 
   /// Meme correctif : aucune protection avant, meme symptome que
   /// startIntervention (crash au clic sur "Terminer").
-  Future<bool> completeIntervention(String id) async {
+  Future<bool> completeIntervention(String id, {required double finalAmount}) async {
     _actionError = null;
     try {
       final data = await _api
-          .completeIntervention(id)
+          .completeIntervention(id, finalAmount: finalAmount)
           .timeout(const Duration(seconds: 30));
       _upsert(InterventionModel.fromJson(data));
       _isAvailable = true;
