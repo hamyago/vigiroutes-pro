@@ -210,6 +210,24 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                     ),
                   ),
 
+                  // AJOUTÉ : commander des pièces pendant l'intervention.
+                  if (i.isAccepted || i.isInProgress) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push('/provider/parts'),
+                        icon: const Icon(Icons.build_circle_outlined),
+                        label: const Text('Commander des pièces'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.border),
+                          minimumSize: const Size(0, 48),
+                        ),
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 24),
 
                   // ── Actions selon le statut ───────────────────────────────

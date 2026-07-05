@@ -52,6 +52,12 @@ class ProviderProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _MenuTile(
+            icon: Icons.build_circle_outlined,
+            title: 'Pièces auto',
+            onTap: () => context.push('/provider/parts'),
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
             icon: Icons.receipt_long_outlined,
             title: 'Historique des souscriptions',
             onTap: () => context.push('/provider/subscription/history'),

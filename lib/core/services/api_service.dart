@@ -332,4 +332,48 @@ class ApiService {
     });
     return res.data as Map<String, dynamic>;
   }
+  // AJOUTÉ : recherche et commande de pièces automobiles auprès des
+  // magasins à proximité (rayon 3 km par défaut) — utile pendant une
+  // intervention.
+  Future<List<dynamic>> searchParts({
+    required String query,
+    required double latitude,
+    required double longitude,
+    double radiusKm = 3,
+  }) async {
+    final res = await get('/provider/parts/search', params: {
+      'q': query,
+      'latitude': latitude,
+      'longitude': longitude,
+      'radius_km': radiusKm,
+    });
+    return res.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getStoreDetail(String storeId) async {
+    final res = await get('/provider/parts/stores/$storeId');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createPartOrder({
+    required String storeId,
+    required List<Map<String, dynamic>> items,
+    String? note,
+  }) async {
+    final res = await post('/provider/parts/orders', data: {
+      'store_id': storeId,
+      'items': items,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> getMyPartOrders({int page = 1}) async {
+    try {
+      final res = await get('/provider/parts/orders', params: {'page': page});
+      return (res.data['data'] as List?) ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
 }

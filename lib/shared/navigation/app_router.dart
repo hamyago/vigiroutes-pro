@@ -11,6 +11,9 @@ import '../../features/home/screens/provider_home_screen.dart';
 import '../../features/interventions/screens/provider_navigation_screen.dart';
 import '../../features/reviews/screens/review_client_screen.dart';
 import '../../features/reviews/screens/provider_reviews_screen.dart';
+import '../../features/parts/screens/parts_search_screen.dart';
+import '../../features/parts/screens/store_detail_screen.dart';
+import '../../features/parts/screens/part_orders_screen.dart';
 import '../../features/earnings/screens/provider_earnings_screen.dart';
 import '../../features/history/screens/provider_history_screen.dart';
 import '../../features/profile/screens/provider_profile_screen.dart';
@@ -79,6 +82,13 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
         GoRoute(path: '/provider/review/:id', builder: (ctx, s) =>
             ReviewClientScreen(
                 interventionId: s.pathParameters['id']!)),
+
+        GoRoute(path: '/provider/parts', builder: (ctx, s) =>
+            const PartsSearchScreen()),
+        GoRoute(path: '/provider/parts/store/:id', builder: (ctx, s) =>
+            StoreDetailScreen(storeId: s.pathParameters['id']!)),
+        GoRoute(path: '/provider/parts/orders', builder: (ctx, s) =>
+            const PartOrdersScreen()),
 
         GoRoute(path: '/provider/reviews', builder: (ctx, s) =>
             const ProviderReviewsScreen()),
