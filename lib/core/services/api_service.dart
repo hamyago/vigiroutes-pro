@@ -200,6 +200,12 @@ class ApiService {
   Future<void> cancelIntervention(String id, {String? reason}) =>
       post('/user/interventions/$id/cancel', data: {'reason': reason});
 
+  // AJOUTÉ : déclineIntervention() appelait par erreur cette méthode
+  // (endpoint CLIENT, jamais accessible à un prestataire) — nouveau
+  // endpoint dédié, correctement protégé côté provider.
+  Future<void> declineDispatchedIntervention(String id) =>
+      post('/provider/interventions/$id/decline');
+
   Future<List<dynamic>> getProviderInterventions({int page = 1}) async {
     final res = await get('/provider/interventions', params: {'page': page});
     return (res.data['data'] as List?) ?? [];

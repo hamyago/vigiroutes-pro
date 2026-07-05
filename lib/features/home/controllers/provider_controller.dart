@@ -351,7 +351,12 @@ class ProviderController extends ChangeNotifier {
     _actionError = null;
     try {
       ProviderAlertService.instance.stop();
-      await _api.cancelIntervention(id).timeout(const Duration(seconds: 30));
+      // BUG CORRIGÉ : appelait cancelIntervention() -> /user/interventions/
+      // {id}/cancel, l'endpoint CLIENT. Un token prestataire ne passe
+      // jamais ce contrôle (401 systématique), et comme l'app se
+      // déconnecte automatiquement sur toute erreur 401, refuser une
+      // demande plantait littéralement l'app et renvoyait au splashscreen.
+      await _api.declineDispatchedIntervention(id).timeout(const Duration(seconds: 30));
       _pendingDispatch = null;
       notifyListeners();
       return true;
