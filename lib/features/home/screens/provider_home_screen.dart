@@ -121,6 +121,55 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 
               const SizedBox(height: 24),
 
+              // AJOUTÉ : accès bien visible à la commande de pièces auto,
+              // demandé explicitement (auparavant seulement dans le menu
+              // profil et sur l'écran d'intervention en cours).
+              InkWell(
+                onTap: () => context.push('/provider/parts'),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.primary, AppColors.primaryDark],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                            child: Text('🔩', style: TextStyle(fontSize: 22))),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Pièces auto',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15)),
+                            Text('Commandez des pièces chez un magasin proche',
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right, color: Colors.white),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
               // Active intervention
               if (ctrl.activeIntervention != null) ...[
                 _ActiveInterventionCard(
