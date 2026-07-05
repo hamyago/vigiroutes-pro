@@ -189,6 +189,17 @@ class ProviderController extends ChangeNotifier {
   // ── GPS continu ───────────────────────────────────────────────────────────
 
   void _startLocationUpdates() {
+    // BUG CORRIGÉ : le flux GPS (distanceFilter: 10) n'envoie une mise à
+    // jour qu'après 10 mètres de déplacement RÉEL — tant que le
+    // prestataire ne bouge pas (très courant juste après avoir accepté,
+    // ou en tests en intérieur), AUCUNE position n'était jamais envoyée,
+    // donc le client ne voyait même pas le point du prestataire sur sa
+    // carte (pas juste "il ne bouge pas" — littéralement absent). On
+    // envoie maintenant systématiquement une position immédiate au
+    // démarrage, puis le flux filtré prend le relais pour les
+    // déplacements réels.
+    _sendImmediatePosition();
+
     _locationSub = _location.positionStream().listen(
       (pos) async {
         if (_provider == null) return;
@@ -223,6 +234,22 @@ class ProviderController extends ChangeNotifier {
     );
   }
 
+  Future<void> _sendImmediatePosition() async {
+    try {
+      final pos = await _location.getCurrentPosition();
+      if (pos == null || _provider == null) return;
+      await _api.updateGlobalLocation(pos.latitude, pos.longitude);
+      final active = activeIntervention;
+      if (active != null) {
+        await _api.updateProviderLocation(active.id, pos.latitude, pos.longitude);
+      }
+    } catch (e) {
+      debugPrint('[ProviderController] Erreur position immédiate : $e');
+      // Silencieux : le flux GPS ci-dessous réessaiera dès le premier
+      // déplacement de toute façon.
+    }
+  }
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
   Future<void> toggleAvailability() async {
@@ -252,6 +279,13 @@ class ProviderController extends ChangeNotifier {
       _isAvailable     = false;
       _isLoading       = false;
       notifyListeners();
+      // AJOUTÉ : au démarrage de l'app, aucune intervention n'est encore
+      // active, donc l'envoi de position immédiate ne renseignait que la
+      // position générale du prestataire, jamais provider_latitude sur
+      // CETTE intervention précise. Sans ça, le client ne voyait aucun
+      // point prestataire sur sa carte tant que celui-ci n'avait pas
+      // parcouru 10m après avoir accepté.
+      _sendImmediatePosition();
       return true;
     } catch (e) {
       debugPrint('[ProviderController] acceptIntervention error: $e');
