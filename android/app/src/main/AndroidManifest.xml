@@ -27,6 +27,15 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}"/>
 
+        <!-- AJOUTÉ : correctif connu pour un bug Flutter/Android où
+             google_maps_flutter (toujours une dépendance, même si la
+             carte a été retirée de l'écran de navigation) bloque
+             l'affichage du clavier sur d'autres écrans (TextField qui
+             semble mort — pas de clavier, aucune saisie possible). -->
+        <meta-data
+            android:name="io.flutter.embedded_views_preview"
+            android:value="true"/>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
