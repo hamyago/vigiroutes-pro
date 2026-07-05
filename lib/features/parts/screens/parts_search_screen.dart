@@ -97,13 +97,15 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
                     controller: _searchCtrl,
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => _search(),
+                    autofocus: false,
+                    enabled: true,
+                    style: const TextStyle(color: Colors.black87, fontSize: 15),
+                    cursorColor: AppColors.primary,
                     decoration: InputDecoration(
                       hintText: 'Ex: plaquette de frein, batterie, pneu...',
+                      hintStyle: const TextStyle(color: AppColors.textMuted),
                       filled: true,
                       fillColor: Colors.white,
-                      // BUG CORRIGÉ : c'était une Icon() décorative, pas
-                      // cliquable — remplacée par un vrai IconButton qui
-                      // déclenche aussi la recherche.
                       prefixIcon: IconButton(
                         icon: const Icon(Icons.search),
                         onPressed: _searching ? null : _search,
