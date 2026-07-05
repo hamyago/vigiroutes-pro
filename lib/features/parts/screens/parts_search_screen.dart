@@ -93,30 +93,28 @@ class _PartsSearchScreenState extends State<PartsSearchScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _search(),
-                    autofocus: false,
-                    enabled: true,
-                    style: const TextStyle(color: Colors.black87, fontSize: 15),
-                    cursorColor: AppColors.primary,
-                    decoration: InputDecoration(
-                      hintText: 'Ex: plaquette de frein, batterie, pneu...',
-                      hintStyle: const TextStyle(color: AppColors.textMuted),
-                      filled: true,
-                      fillColor: Colors.white,
-                      prefixIcon: IconButton(
-                        icon: const Icon(Icons.search),
-                        onPressed: _searching ? null : _search,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppColors.border),
+                  child: Form(
+                    child: TextFormField(
+                      controller: _searchCtrl,
+                      textInputAction: TextInputAction.search,
+                      onFieldSubmitted: (_) => _search(),
+                      decoration: InputDecoration(
+                        hintText: 'Ex: plaquette de frein, batterie, pneu...',
+                        filled: true,
+                        fillColor: Colors.white,
+                        // SIMPLIFIÉ : retour à une icône décorative simple
+                        // (le bouton "Chercher" à côté suffit) — un
+                        // IconButton comme prefixIcon pouvait entrer en
+                        // conflit avec la zone tactile du champ lui-même.
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
                       ),
                     ),
                   ),
