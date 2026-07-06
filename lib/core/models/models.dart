@@ -333,16 +333,27 @@ class StoreModel {
     this.products = const [],
   });
 
+  static double? _numOrNull(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  static double _num(dynamic v, [double fallback = 0]) => _numOrNull(v) ?? fallback;
+
   factory StoreModel.fromJson(Map<String, dynamic> json) => StoreModel(
         id:         json['id'] as String,
         name:       json['name'] as String,
         phone:      json['phone'] as String?,
         address:    json['address'] as String?,
-        latitude:   (json['latitude']  as num?)?.toDouble(),
-        longitude:  (json['longitude'] as num?)?.toDouble(),
-        distanceKm: (json['distance_km'] as num?)?.toDouble(),
-        rating:     (json['rating'] as num?)?.toDouble() ?? 0,
-        ratingCount:(json['rating_count'] as num?)?.toInt() ?? 0,
+        latitude:   _numOrNull(json['latitude']),
+        longitude:  _numOrNull(json['longitude']),
+        // BUG CORRIGÉ : distance_km vient d'une expression SQL brute
+        // (formule haversine), renvoyée en chaîne de texte par
+        // PostgreSQL/PHP — le cast `as num?` plantait systématiquement.
+        distanceKm: _numOrNull(json['distance_km']),
+        rating:     _num(json['rating']),
+        ratingCount:(json['rating_count'] as num?)?.toInt() ?? int.tryParse(json['rating_count']?.toString() ?? '') ?? 0,
         products:   (json['products'] as List<dynamic>? ?? [])
             .map((p) => StoreProductModel.fromJson(p as Map<String, dynamic>))
             .toList(),
