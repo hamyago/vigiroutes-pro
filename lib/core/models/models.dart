@@ -1,3 +1,50 @@
+// ── ProviderAssistant ─────────────────────────────────────────────────────────
+// Intervenant rattaché au prestataire principal (membre de son garage).
+// N'est PAS un compte : pas d'auth, pas de commande reçue. Sert uniquement à
+// désigner qui intervient physiquement sur une commande acceptée.
+
+class ProviderAssistant {
+  final int id;
+  final String name;
+  final String? phone;
+  final String? photoUrl;
+  final bool isActive;
+
+  const ProviderAssistant({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.photoUrl,
+    this.isActive = true,
+  });
+
+  static int _toInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse('$v') ?? 0;
+  }
+
+  static bool _toBool(dynamic v) =>
+      v == true || v == 1 || v == '1' || v == 'true';
+
+  factory ProviderAssistant.fromJson(Map<String, dynamic> json) => ProviderAssistant(
+        id:       _toInt(json['id']),
+        name:     (json['name'] ?? '').toString(),
+        phone:    json['phone']?.toString(),
+        photoUrl: json['photo_url']?.toString(),
+        isActive: json['is_active'] == null ? true : _toBool(json['is_active']),
+      );
+
+  // Conservé compact pour survivre aux fusions copyWithWs.
+  Map<String, dynamic> toJson() => {
+        'id':        id,
+        'name':      name,
+        'phone':     phone,
+        'photo_url': photoUrl,
+        'is_active': isActive,
+      };
+}
+
 // ── UserModel ─────────────────────────────────────────────────────────────────
 
 class UserModel {
@@ -142,6 +189,7 @@ class InterventionModel {
   final DateTime? startedAt;
   final DateTime? completedAt;
   final ProviderModel? provider;
+  final ProviderAssistant? assignedAssistant;
 
   const InterventionModel({
     required this.id,
@@ -172,6 +220,7 @@ class InterventionModel {
     this.startedAt,
     this.completedAt,
     this.provider,
+    this.assignedAssistant,
   });
 
   bool get isPending    => status == 'pending' || status == 'dispatching';
@@ -215,6 +264,9 @@ class InterventionModel {
         provider:     json['provider'] != null
             ? ProviderModel.fromJson(json['provider'] as Map<String, dynamic>)
             : null,
+        assignedAssistant: json['assigned_assistant'] != null
+            ? ProviderAssistant.fromJson(json['assigned_assistant'] as Map<String, dynamic>)
+            : null,
       );
 
   /// Mise à jour partielle depuis un événement WebSocket
@@ -249,6 +301,9 @@ class InterventionModel {
         startedAt:   startedAt,
         completedAt: completedAt,
         provider:    provider,
+        assignedAssistant: data['assigned_assistant'] != null
+            ? ProviderAssistant.fromJson(data['assigned_assistant'] as Map<String, dynamic>)
+            : assignedAssistant,
       );
 }
 

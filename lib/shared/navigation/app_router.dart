@@ -20,6 +20,7 @@ import '../../features/profile/screens/provider_profile_screen.dart';
 import '../../features/profile/screens/provider_info_screen.dart';
 import '../../features/profile/screens/provider_subscription_history_screen.dart';
 import '../../features/profile/screens/provider_rates_screen.dart';
+import '../../features/team/screens/team_screen.dart';
 import '../../features/subscription/screens/provider_subscription_screen.dart';
 import '../../features/home/controllers/provider_controller.dart';
 
@@ -105,6 +106,10 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
         // ── Tarifs prestataire ────────────────────────────────────
         GoRoute(path: '/provider/rates', builder: (ctx, s) =>
             const ProviderRatesScreen()),
+
+        // ── Mon équipe (assistants) ───────────────────────────────
+        GoRoute(path: '/provider/team', builder: (ctx, s) =>
+            const TeamScreen()),
       ],
     );
 

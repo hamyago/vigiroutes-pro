@@ -17,6 +17,7 @@ class ProviderController extends ChangeNotifier {
   ProviderModel?          _provider;
   List<InterventionModel> _myInterventions  = [];
   InterventionModel?      _pendingDispatch;   // alerte dispatch entrante
+  List<ProviderAssistant> _assistants       = []; // équipe du prestataire
   bool                    _isAvailable = true;
   bool                    _isLoading   = false;
   bool                    _initialized = false;
@@ -29,6 +30,9 @@ class ProviderController extends ChangeNotifier {
   ProviderModel?          get provider          => _provider;
   List<InterventionModel> get myInterventions   => _myInterventions;
   InterventionModel?      get pendingDispatch   => _pendingDispatch;
+  List<ProviderAssistant> get assistants        => List.unmodifiable(_assistants);
+  bool                    get canAddAssistant   =>
+      _assistants.where((a) => a.isActive).length < 3;
   bool                    get isAvailable       => _isAvailable;
   bool                    get isLoading         => _isLoading;
 
@@ -67,6 +71,7 @@ class ProviderController extends ChangeNotifier {
     }
     _initialized = true;
     _loadInterventions();
+    loadAssistants();
     _startLocationUpdates();
     _subscribeWebSocket();
     _subscribeFcm();
@@ -264,14 +269,14 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  Future<bool> acceptIntervention(String id) async {
+  Future<bool> acceptIntervention(String id, {int? assignedAssistantId}) async {
     _isLoading = true;
     _actionError = null;
     ProviderAlertService.instance.stop();
     notifyListeners();
     try {
       final data    = await _api
-          .acceptIntervention(id)
+          .acceptIntervention(id, assignedAssistantId: assignedAssistantId)
           .timeout(const Duration(seconds: 30));
       final updated = InterventionModel.fromJson(data);
       _upsert(updated);
@@ -364,6 +369,86 @@ class ProviderController extends ChangeNotifier {
       debugPrint('[ProviderController] declineIntervention error: $e');
       FirebaseCrashlytics.instance.log('[ProviderController] declineIntervention error: $e');
       _actionError = 'Impossible de refuser cette demande. Réessayez.';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ── Équipe / intervenants ────────────────────────────────────────────────
+
+  Future<void> loadAssistants() async {
+    try {
+      final list = await _api.getAssistants();
+      _assistants
+        ..clear()
+        ..addAll(list);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[ProviderController] loadAssistants: $e');
+    }
+  }
+
+  /// Renvoie null en cas de succès, sinon un message d'erreur à afficher.
+  Future<String?> addAssistant({
+    required String name,
+    String? phone,
+    String? photoBase64,
+  }) async {
+    try {
+      final created = await _api.createAssistant(
+          name: name, phone: phone, photoBase64: photoBase64);
+      _assistants.add(created);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      debugPrint('[ProviderController] addAssistant: $e');
+      return 'Impossible d\'ajouter cet assistant. Réessayez.';
+    }
+  }
+
+  Future<String?> updateAssistant(int id, {
+    String? name,
+    String? phone,
+    String? photoBase64,
+  }) async {
+    try {
+      final updated = await _api.updateAssistant(id,
+          name: name, phone: phone, photoBase64: photoBase64);
+      final idx = _assistants.indexWhere((a) => a.id == id);
+      if (idx >= 0) _assistants[idx] = updated;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      debugPrint('[ProviderController] updateAssistant: $e');
+      return 'Impossible de modifier cet assistant. Réessayez.';
+    }
+  }
+
+  Future<bool> removeAssistant(int id) async {
+    try {
+      await _api.deleteAssistant(id);
+      _assistants.removeWhere((a) => a.id == id);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[ProviderController] removeAssistant: $e');
+      return false;
+    }
+  }
+
+  /// Réaffecte l'intervenant d'une commande déjà acceptée (null = moi-même).
+  Future<bool> assignAssistant(String interventionId, int? assistantId) async {
+    _actionError = null;
+    try {
+      final data = await _api
+          .assignAssistant(interventionId, assistantId)
+          .timeout(const Duration(seconds: 30));
+      _upsert(InterventionModel.fromJson(data));
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[ProviderController] assignAssistant: $e');
+      _actionError = 'Impossible de réaffecter cette commande. Réessayez.';
       notifyListeners();
       return false;
     }

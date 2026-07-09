@@ -46,6 +46,12 @@ class ProviderProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _MenuTile(
+            icon: Icons.groups_outlined,
+            title: 'Mon équipe',
+            onTap: () => context.push('/provider/team'),
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
             icon: Icons.star_outline,
             title: 'Mes avis',
             onTap: () => context.push('/provider/reviews'),

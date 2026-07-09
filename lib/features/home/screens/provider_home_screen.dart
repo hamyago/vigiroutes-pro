@@ -7,6 +7,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/utils/price_calculator.dart';
 import '../../../shared/widgets/provider_bottom_nav.dart';
+import '../../team/widgets/assign_assistant_sheet.dart';
 
 class ProviderHomeScreen extends StatefulWidget {
   const ProviderHomeScreen({super.key});
@@ -238,7 +239,23 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                     .map((req) => _RequestCard(
                           request: req,
                           onAccept: () async {
-                            final ok = await ctrl.acceptIntervention(req.id);
+                            // Si le prestataire a des assistants, on lui
+                            // demande qui va intervenir (lui-même par
+                            // défaut) AVANT d'accepter. S'il n'en a aucun,
+                            // le flux reste strictement identique à avant.
+                            int? assistantId;
+                            if (ctrl.assistants.isNotEmpty) {
+                              final choice = await showAssignAssistantSheet(
+                                context,
+                                assistants: ctrl.assistants,
+                                currentAssistantId: null,
+                                title: 'Qui va intervenir ?',
+                              );
+                              if (choice == null) return; // annulé -> pas d'acceptation
+                              assistantId = choice.assistantId;
+                            }
+                            final ok = await ctrl.acceptIntervention(
+                                req.id, assignedAssistantId: assistantId);
                             if (!context.mounted) return;
                             if (ok) {
                               context.push('/provider/navigation/${req.id}');

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/models.dart';
 
 class ApiService {
   ApiService._();
@@ -211,8 +212,60 @@ class ApiService {
     return (res.data['data'] as List?) ?? [];
   }
 
-  Future<Map<String, dynamic>> acceptIntervention(String id) async {
-    final res = await post('/provider/interventions/$id/accept');
+  // MODIFIÉ : le prestataire peut, au moment d'accepter, désigner
+  // directement un de ses assistants comme intervenant (null = lui-même).
+  Future<Map<String, dynamic>> acceptIntervention(String id,
+      {int? assignedAssistantId}) async {
+    final res = await post('/provider/interventions/$id/accept',
+        data: assignedAssistantId != null
+            ? {'assigned_assistant_id': assignedAssistantId}
+            : null);
+    return res.data as Map<String, dynamic>;
+  }
+
+  // ── Équipe / intervenants (max 3) ─────────────────────────────────────
+  Future<List<ProviderAssistant>> getAssistants() async {
+    final res = await get('/provider/assistants');
+    final list = (res.data['data'] as List?) ?? [];
+    return list
+        .map((e) => ProviderAssistant.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ProviderAssistant> createAssistant({
+    required String name,
+    String? phone,
+    String? photoBase64, // data:image/...;base64,...  (comme la photo prestataire)
+  }) async {
+    final res = await post('/provider/assistants', data: {
+      'name': name,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (photoBase64 != null) 'photo_base64': photoBase64,
+    });
+    return ProviderAssistant.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
+
+  Future<ProviderAssistant> updateAssistant(int id, {
+    String? name,
+    String? phone,
+    String? photoBase64,
+  }) async {
+    final res = await patch('/provider/assistants/$id', data: {
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (photoBase64 != null) 'photo_base64': photoBase64,
+    });
+    return ProviderAssistant.fromJson(res.data['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteAssistant(int id) => delete('/provider/assistants/$id');
+
+  // Affecter / réaffecter l'intervenant d'une commande déjà acceptée.
+  // Passer null pour revenir à "moi-même".
+  Future<Map<String, dynamic>> assignAssistant(
+      String interventionId, int? assistantId) async {
+    final res = await post('/provider/interventions/$interventionId/assign',
+        data: {'assigned_assistant_id': assistantId});
     return res.data as Map<String, dynamic>;
   }
 

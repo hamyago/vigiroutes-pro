@@ -9,6 +9,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';
 import '../../../core/utils/price_calculator.dart';
 import '../../home/controllers/provider_controller.dart';
+import '../../team/widgets/assign_assistant_sheet.dart';
 import '../../auth/controllers/auth_controller.dart';
 
 /// AVANT : cet écran embarquait un widget GoogleMap natif avec marqueurs
@@ -82,6 +83,25 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
   void dispose() {
     _wsSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _changeAssignee(InterventionModel i) async {
+    final ctrl = context.read<ProviderController>();
+    final choice = await showAssignAssistantSheet(
+      context,
+      assistants: ctrl.assistants,
+      currentAssistantId: i.assignedAssistant?.id,
+      title: 'Changer l\'intervenant',
+    );
+    if (choice == null || !mounted) return;
+    final ok = await ctrl.assignAssistant(i.id, choice.assistantId);
+    if (!mounted) return;
+    if (ok) {
+      await _loadIntervention();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ctrl.actionError ?? 'Réaffectation impossible.')));
+    }
   }
 
   Future<void> _openNavigation() async {
@@ -195,6 +215,15 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
 
                   const SizedBox(height: 16),
 
+                  // ── Intervenant affecté (réaffectation possible) ─────────
+                  if (i.isAccepted || i.isInProgress) ...[
+                    _AssigneeCard(
+                      intervention: i,
+                      onChange: () => _changeAssignee(i),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // ── Bouton navigation externe (principal) ────────────────
                   SizedBox(
                     width: double.infinity,
@@ -306,6 +335,53 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _AssigneeCard extends StatelessWidget {
+  final InterventionModel intervention;
+  final VoidCallback onChange;
+  const _AssigneeCard({required this.intervention, required this.onChange});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = intervention.assignedAssistant;
+    final isSelf = a == null;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: AppColors.primaryLight,
+          backgroundImage: (!isSelf && a.photoUrl != null && a.photoUrl!.isNotEmpty)
+              ? NetworkImage(a.photoUrl!)
+              : null,
+          child: (isSelf || a.photoUrl == null || a.photoUrl!.isEmpty)
+              ? Text(isSelf ? '🧑' : '🧑‍🔧', style: const TextStyle(fontSize: 20))
+              : null,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Intervenant',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
+            const SizedBox(height: 2),
+            Text(isSelf ? 'Moi-même' : a.name,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ]),
+        ),
+        TextButton.icon(
+          onPressed: onChange,
+          icon: const Icon(Icons.swap_horiz, size: 18),
+          label: const Text('Changer'),
+        ),
+      ]),
     );
   }
 }
