@@ -5,12 +5,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../shared/widgets/provider_bottom_nav.dart';
+
 
 class ProviderProfileScreen extends StatelessWidget {
   const ProviderProfileScreen({super.key});
@@ -49,6 +51,21 @@ class ProviderProfileScreen extends StatelessWidget {
             icon: Icons.groups_outlined,
             title: 'Mon équipe',
             onTap: () => context.push('/provider/team'),
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
+            icon: Icons.description_outlined,
+            title: 'Conditions d\'utilisation',
+            onTap: () async {
+              final uri = Uri.parse('https://vigiroutes.com/cgu');
+              if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Impossible d\'ouvrir la page.')),
+                  );
+                }
+              }
+            },
           ),
           const SizedBox(height: 12),
           _MenuTile(
