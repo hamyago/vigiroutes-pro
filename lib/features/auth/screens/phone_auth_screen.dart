@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../controllers/auth_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/custom_button.dart';
+import '../../../shared/widgets/cgu_checkbox.dart';
 
 class PhoneAuthScreen extends StatefulWidget {
   final bool isProvider;
@@ -19,6 +20,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   String _phoneNumber = '';
   bool   _valid       = false;
   bool   _waitingForOtp = false; // ← nouveau flag
+  bool   _cguAccepted   = false; // case CGU obligatoire
 
   /// Format E.164 pour Firebase
   /// Numéros CI 10 chiffres avec 0 → +225XXXXXXXXXX
@@ -218,10 +220,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ],
 
               const Spacer(),
+              CguCheckbox(
+                value: _cguAccepted,
+                onChanged: (v) => setState(() => _cguAccepted = v),
+              ),
+              const SizedBox(height: 12),
               AppButton(
                 label: isLoading ? 'Envoi en cours...' : 'Recevoir le code',
                 isLoading: isLoading,
-                enabled: _valid && !isLoading,
+                enabled: _valid && _cguAccepted && !isLoading,
                 onPressed: () => _handleSendOtp(auth),
               ),
               const SizedBox(height: 16),
