@@ -12,6 +12,7 @@ import '../../../core/services/api_service.dart';
 import '../../auth/controllers/auth_controller.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../shared/widgets/provider_bottom_nav.dart';
+import '../../legal/screens/privacy_policy_screen.dart';
 
 
 class ProviderProfileScreen extends StatelessWidget {
@@ -51,6 +52,14 @@ class ProviderProfileScreen extends StatelessWidget {
             icon: Icons.groups_outlined,
             title: 'Mon équipe',
             onTap: () => context.push('/provider/team'),
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Politique de confidentialité',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+            ),
           ),
           const SizedBox(height: 12),
           _MenuTile(
