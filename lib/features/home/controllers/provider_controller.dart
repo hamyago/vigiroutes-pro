@@ -70,12 +70,28 @@ class ProviderController extends ChangeNotifier {
       return;
     }
     _initialized = true;
-    _loadInterventions();
+    _bootstrapDispatch();
     loadAssistants();
     _startLocationUpdates();
     _subscribeWebSocket();
     _subscribeFcm();
     _startPolling();
+  }
+
+  /// Charge les interventions à l'ouverture et, si une demande est déjà en
+  /// attente (typiquement un push de dispatch tapé alors que l'app était en
+  /// arrière-plan — cas où onMessage ne se déclenche pas), lève l'alarme
+  /// sonore pour que le prestataire ne rate pas la demande.
+  Future<void> _bootstrapDispatch() async {
+    await _loadInterventions();
+    final pending = pendingRequests;
+    if (pending.isNotEmpty) {
+      ProviderAlertService.instance.newOrder(
+        dispatchId:  pending.first.id,
+        serviceName: pending.first.serviceTypeName,
+      );
+      notifyListeners();
+    }
   }
 
   // ── Rafraîchissement automatique par sondage (secours) ──────────────────
