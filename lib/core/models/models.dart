@@ -141,8 +141,8 @@ class ProviderModel {
         phone:              json['phone'] as String? ?? '',
         photoUrl:           json['photo_url'] as String?,
         fcmToken:           json['fcm_token'] as String?,
-        latitude:           (json['latitude'] as num?)?.toDouble() ?? 0,
-        longitude:          (json['longitude'] as num?)?.toDouble() ?? 0,
+        latitude:           _numToDouble(json['latitude']),
+        longitude:          _numToDouble(json['longitude']),
         isAvailable:        json['is_available'] as bool? ?? true,
         isActive:           json['is_active'] as bool? ?? true,
         isVerified:         json['is_verified'] as bool? ?? false,
@@ -150,11 +150,11 @@ class ProviderModel {
         proLicenseUrl:      json['pro_license_url'] as String?,
         serviceTypes:       (json['service_types'] as List?)
                                 ?.map((e) => e as String).toList() ?? [],
-        rating:             (json['rating'] as num?)?.toDouble() ?? 0,
-        ratingCount:        json['rating_count'] as int? ?? 0,
-        totalEarnings:      (json['total_earnings'] as num?)?.toDouble() ?? 0,
-        totalInterventions: json['total_interventions'] as int? ?? 0,
-        distanceKm:         (json['distance_km'] as num?)?.toDouble(),
+        rating:             _numToDouble(json['rating']),
+        ratingCount:        _numToInt(json['rating_count']),
+        totalEarnings:      _numToDouble(json['total_earnings']),
+        totalInterventions: _numToInt(json['total_interventions']),
+        distanceKm:         _numToDoubleN(json['distance_km']),
       );
 }
 
@@ -463,4 +463,27 @@ class PartOrderModel {
             .toList(),
         store: json['store'] as Map<String, dynamic>?,
       );
+}
+
+// ── Helpers de parsing tolérants ─────────────────────────────────────────────
+// Laravel sérialise les colonnes DECIMAL en CHAÎNES ("5.3301"). Un cast direct
+// `as num` sur une chaîne lève une exception et faisait planter le parsing
+// (et donc le login : « connexion au serveur »). Ces helpers acceptent num,
+// String ou null.
+double _numToDouble(dynamic v, [double fallback = 0]) {
+  if (v == null) return fallback;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString()) ?? fallback;
+}
+
+double? _numToDoubleN(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString());
+}
+
+int _numToInt(dynamic v, [int fallback = 0]) {
+  if (v == null) return fallback;
+  if (v is num) return v.toInt();
+  return int.tryParse(v.toString()) ?? fallback;
 }
