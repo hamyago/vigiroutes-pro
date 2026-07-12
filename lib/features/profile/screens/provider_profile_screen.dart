@@ -91,6 +91,12 @@ class ProviderProfileScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _MenuTile(
             icon: Icons.receipt_long_outlined,
+            title: 'Mes commandes de pièces',
+            onTap: () => context.push('/provider/parts/orders'),
+          ),
+          const SizedBox(height: 12),
+          _MenuTile(
+            icon: Icons.receipt_long_outlined,
             title: 'Historique des souscriptions',
             onTap: () => context.push('/provider/subscription/history'),
           ),
