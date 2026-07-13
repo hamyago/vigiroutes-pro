@@ -106,8 +106,8 @@ class ApiService {
       if (phone    != null) 'phone':     phone,
       if (fcmToken != null) 'fcm_token': fcmToken,
     });
-    final token = res.data['token'] as String;
-    await saveToken(token);
+    final token = res.data['token'] as String?;
+    if (token != null) await saveToken(token);
     return res.data as Map<String, dynamic>;
   }
 
@@ -137,12 +137,20 @@ class ApiService {
         validateStatus: (status) => status != null && status < 300,
       ),
     );
-    if (res.statusCode == 202) {
+    final data = (res.data as Map).cast<String, dynamic>();
+
+    // Nouveau prestataire : le backend renvoie is_new (statut 200 OU 202 selon
+    // les versions) SANS token. On le détecte via les DONNÉES pour ne pas
+    // dépendre du code HTTP — sinon on tombait sur `res.data['token'] as
+    // String` avec un token null (« type Null is not a subtype of String »),
+    // ce qui bloquait toute connexion d'un prestataire pas encore configuré.
+    if (res.statusCode == 202 || data['is_new'] == true) {
       return {'is_new': true, 'requires': 'profile_setup'};
     }
-    final token = res.data['token'] as String;
-    await saveToken(token);
-    return res.data as Map<String, dynamic>;
+
+    final token = data['token'] as String?;
+    if (token != null) await saveToken(token);
+    return data;
   }
 
   Future<void> logout() async {
