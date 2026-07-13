@@ -141,11 +141,33 @@ class AuthController extends ChangeNotifier {
         return true;
       }
 
-      // Prestataire existant → connecté
-      _provider  = ProviderModel.fromJson(response['provider'] as Map<String, dynamic>);
+      // Prestataire existant → connecté.
+      final providerJson = response['provider'];
+      if (providerJson is! Map) {
+        // Réponse inattendue (ni is_new, ni provider) : on redirige vers la
+        // configuration de profil plutôt que de planter.
+        debugPrint('[ProviderAuth] provider absent de la réponse: $response');
+        _state     = AuthState.unauthenticated;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+      _provider = ProviderModel.fromJson(
+        Map<String, dynamic>.from(providerJson),
+      );
       _state     = AuthState.authenticated;
       _isLoading = false;
-      await RealtimeService.instance.init(response['token'] as String);
+
+      // Le token peut être absent/null : on ne fait pas planter la connexion
+      // pour autant (le temps réel se (re)connectera plus tard).
+      final token = response['token'];
+      if (token is String && token.isNotEmpty) {
+        try {
+          await RealtimeService.instance.init(token);
+        } catch (e) {
+          debugPrint('[ProviderAuth] RealtimeService.init non-fatal: $e');
+        }
+      }
       notifyListeners();
       return true;
 
