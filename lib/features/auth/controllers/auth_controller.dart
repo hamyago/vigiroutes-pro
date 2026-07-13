@@ -200,7 +200,15 @@ class AuthController extends ChangeNotifier {
   }) async {
     try {
       final idToken  = await firebaseUser.getIdToken(true);
-      final fcmToken = await FirebaseMessaging.instance.getToken();
+      // Token FCM optionnel : ne doit pas bloquer la création du profil.
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance
+            .getToken()
+            .timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('[ProviderAuth] getToken non-fatal: $e');
+      }
 
       // Sauvegarder le token Firebase pour les requêtes /provider/
       final prefs = await SharedPreferences.getInstance();
@@ -225,15 +233,33 @@ class AuthController extends ChangeNotifier {
         return;
       }
 
-      _provider  = ProviderModel.fromJson(response['provider'] as Map<String, dynamic>);
+      final providerJson = response['provider'];
+      if (providerJson is! Map) {
+        // Réponse inattendue : on renvoie vers la config de profil au lieu
+        // de planter.
+        debugPrint('[ProviderAuth] provider absent (refresh): $response');
+        _state     = AuthState.unauthenticated;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+      _provider  = ProviderModel.fromJson(Map<String, dynamic>.from(providerJson));
       _state     = AuthState.authenticated;
       _isLoading = false;
-      await RealtimeService.instance.init(response['token'] as String);
+      final token = response['token'];
+      if (token is String && token.isNotEmpty) {
+        try {
+          await RealtimeService.instance.init(token);
+        } catch (e) {
+          debugPrint('[ProviderAuth] RealtimeService.init non-fatal: $e');
+        }
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[ProviderAuth] ERROR TYPE: ${e.runtimeType}');
       debugPrint('[ProviderAuth] ERROR DETAIL: $e');
-      _error     = 'Impossible de se connecter au serveur. Vérifiez votre connexion.';
+      // Diagnostic temporaire : affiche l'erreur réelle.
+      _error     = 'Création du profil impossible : $e';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
