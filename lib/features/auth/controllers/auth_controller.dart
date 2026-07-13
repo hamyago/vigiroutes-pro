@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -107,7 +108,19 @@ class AuthController extends ChangeNotifier {
     try {
       final uc      = await _firebaseAuth.signInWithCredential(credential);
       final idToken = await uc.user!.getIdToken(false);
-      final fcmToken = await FirebaseMessaging.instance.getToken();
+      // Le token FCM est OPTIONNEL pour se connecter. Sur certains appareils
+      // getToken() échoue ou expire (service FCM indisponible, Play Services…),
+      // ce qui faisait planter TOUT le login avant même l'appel serveur — d'où
+      // « connexion au serveur » sans aucune trace côté backend. On le rend
+      // non-bloquant.
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance
+            .getToken()
+            .timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('[ProviderAuth] getToken non-fatal: $e');
+      }
 
       // Sauvegarder le token Firebase pour les requêtes /provider/
       final prefs = await SharedPreferences.getInstance();
@@ -144,7 +157,10 @@ class AuthController extends ChangeNotifier {
       return false;
     } catch (e) {
       debugPrint('[ProviderAuth] signIn error: $e');
-      _error     = 'Impossible de se connecter au serveur. Vérifiez votre connexion.';
+      // Diagnostic temporaire : on affiche l'erreur réelle pour identifier la
+      // cause exacte du « connexion au serveur ». À remettre en message
+      // générique une fois le souci confirmé.
+      _error     = 'Connexion impossible : $e';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
