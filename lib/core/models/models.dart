@@ -136,8 +136,8 @@ class ProviderModel {
   });
 
   factory ProviderModel.fromJson(Map<String, dynamic> json) => ProviderModel(
-        id:                 json['id'] as String,
-        name:               json['name'] as String,
+        id:                 json['id'] as String? ?? '',
+        name:               json['name'] as String? ?? 'Prestataire',
         phone:              json['phone'] as String? ?? '',
         photoUrl:           json['photo_url'] as String?,
         fcmToken:           json['fcm_token'] as String?,
