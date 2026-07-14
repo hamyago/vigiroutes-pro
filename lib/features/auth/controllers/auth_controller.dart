@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -180,10 +179,7 @@ class AuthController extends ChangeNotifier {
       return false;
     } catch (e) {
       debugPrint('[ProviderAuth] signIn error: $e');
-      // Diagnostic temporaire : on affiche l'erreur réelle pour identifier la
-      // cause exacte du « connexion au serveur ». À remettre en message
-      // générique une fois le souci confirmé.
-      _error     = 'Connexion impossible : $e';
+      _error     = 'Impossible de se connecter au serveur. Vérifiez votre connexion.';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
@@ -257,15 +253,8 @@ class AuthController extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint('[ProviderAuth] ERROR TYPE: ${e.runtimeType}');
-      debugPrint('[ProviderAuth] ERROR DETAIL: $e');
-      // Diagnostic : pour un rejet serveur (422…), on affiche le corps de la
-      // réponse, qui liste le/les champ(s) refusé(s) par la validation.
-      String detail = '$e';
-      if (e is DioException && e.response != null) {
-        detail = 'HTTP ${e.response?.statusCode} : ${e.response?.data}';
-      }
-      _error     = 'Création du profil impossible : $detail';
+      debugPrint('[ProviderAuth] refreshProvider error: $e');
+      _error     = 'Impossible d\'enregistrer votre profil. Vérifiez votre connexion et réessayez.';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
