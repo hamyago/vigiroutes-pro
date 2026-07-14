@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -258,8 +259,13 @@ class AuthController extends ChangeNotifier {
     } catch (e) {
       debugPrint('[ProviderAuth] ERROR TYPE: ${e.runtimeType}');
       debugPrint('[ProviderAuth] ERROR DETAIL: $e');
-      // Diagnostic temporaire : affiche l'erreur réelle.
-      _error     = 'Création du profil impossible : $e';
+      // Diagnostic : pour un rejet serveur (422…), on affiche le corps de la
+      // réponse, qui liste le/les champ(s) refusé(s) par la validation.
+      String detail = '$e';
+      if (e is DioException && e.response != null) {
+        detail = 'HTTP ${e.response?.statusCode} : ${e.response?.data}';
+      }
+      _error     = 'Création du profil impossible : $detail';
       _isLoading = false;
       _state     = AuthState.unauthenticated;
       notifyListeners();
