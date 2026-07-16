@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
@@ -28,29 +27,16 @@ class ApiService {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final prefs = await SharedPreferences.getInstance();
-        String? token;
+        final path  = options.path;
 
-        if (options.path.startsWith('/provider/')) {
-          // Routes provider → token Firebase (rafraîchi automatiquement)
-          try {
-            final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
-            if (firebaseUser != null) {
-              token = await firebaseUser.getIdToken(false);
-              await prefs.setString('firebase_token', token!);
-            } else {
-              token = prefs.getString('firebase_token');
-            }
-          } catch (_) {
-            token = prefs.getString('firebase_token');
+        // Routes /auth/* → aucun token nécessaire
+        if (!path.startsWith('/auth/')) {
+          final token = prefs.getString('sanctum_token');
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
           }
-        } else {
-          // Autres routes → token Sanctum
-          token = prefs.getString('sanctum_token');
         }
 
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
         if (kDebugMode) {
           debugPrint('[API] ${options.method} ${options.path}');
         }
@@ -94,44 +80,33 @@ class ApiService {
   Future<Response> delete(String path) =>
       _dio.delete(path);
 
-  Future<Map<String, dynamic>> loginUser({
-    required String firebaseToken,
-    String? name,
-    String? phone,
-    String? fcmToken,
-  }) async {
-    final res = await post('/auth/user/login', data: {
-      'firebase_token': firebaseToken,
-      if (name     != null) 'name':      name,
-      if (phone    != null) 'phone':     phone,
-      if (fcmToken != null) 'fcm_token': fcmToken,
-    });
-    final token = res.data['token'] as String?;
-    if (token != null) await saveToken(token);
-    return res.data as Map<String, dynamic>;
+  // ══════════════════════════════════════════════════════════════════════
+  //  Auth — Termii OTP (nouveau flux)
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Demande l'envoi d'un OTP au numéro donné.
+  Future<void> sendOtp(String phone) async {
+    await post('/auth/otp/send', data: {'phone': phone});
   }
 
-  Future<Map<String, dynamic>> loginProvider({
-    required String firebaseToken,
-    String? name,
-    String? phone,
+  /// Vérifie l'OTP et connecte/crée un PRESTATAIRE.
+  Future<Map<String, dynamic>> verifyOtpProvider({
+    required String phone,
+    required String otp,
     String? fcmToken,
+    String? name,
     List<String>? serviceTypes,
     String? sector,
-    double? latitude,
-    double? longitude,
   }) async {
     final res = await _dio.post(
-      '/auth/provider/login',
+      '/auth/otp/verify/provider',
       data: {
-        'firebase_token': firebaseToken,
-        if (name         != null) 'name':          name,
-        if (phone        != null) 'phone':         phone,
+        'phone': phone,
+        'otp':   otp,
         if (fcmToken     != null) 'fcm_token':     fcmToken,
-        if (serviceTypes != null) 'service_types': serviceTypes,
-        if (sector       != null) 'sector':        sector,
-        if (latitude     != null) 'latitude':      latitude,
-        if (longitude    != null) 'longitude':     longitude,
+        if (name         != null) 'name':           name,
+        if (serviceTypes != null) 'service_types':  serviceTypes,
+        if (sector       != null) 'sector':         sector,
       },
       options: Options(
         validateStatus: (status) => status != null && status < 300,
@@ -139,15 +114,36 @@ class ApiService {
     );
     final data = (res.data as Map).cast<String, dynamic>();
 
-    // Nouveau prestataire : le backend renvoie is_new (statut 200 OU 202 selon
-    // les versions) SANS token. On le détecte via les DONNÉES pour ne pas
-    // dépendre du code HTTP — sinon on tombait sur `res.data['token'] as
-    // String` avec un token null (« type Null is not a subtype of String »),
-    // ce qui bloquait toute connexion d'un prestataire pas encore configuré.
-    if (res.statusCode == 202 || data['is_new'] == true) {
-      return {'is_new': true, 'requires': 'profile_setup'};
+    // Nouveau prestataire : le backend renvoie is_new sans token
+    if (data['is_new'] == true && data['token'] == null) {
+      return {'is_new': true, 'phone': phone};
     }
 
+    final token = data['token'] as String?;
+    if (token != null) await saveToken(token);
+    return data;
+  }
+
+  /// Complète le profil prestataire après OTP (quand is_new = true).
+  Future<Map<String, dynamic>> completeProviderProfile({
+    required String phone,
+    required String name,
+    required String sector,
+    required List<String> serviceTypes,
+    String? fcmToken,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final res = await post('/auth/provider/complete-profile', data: {
+      'phone':         phone,
+      'name':          name,
+      'sector':        sector,
+      'service_types': serviceTypes,
+      if (fcmToken  != null) 'fcm_token': fcmToken,
+      if (latitude  != null) 'latitude':  latitude,
+      if (longitude != null) 'longitude': longitude,
+    });
+    final data = (res.data as Map).cast<String, dynamic>();
     final token = data['token'] as String?;
     if (token != null) await saveToken(token);
     return data;
@@ -199,9 +195,6 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getIntervention(String id) async {
-    // BUG CORRIGÉ : appelait /user/interventions/$id (endpoint CLIENT,
-    // protégé par un middleware qui exige un token User, pas Provider) —
-    // échouait systématiquement pour un prestataire.
     final res = await get('/provider/interventions/$id');
     return res.data as Map<String, dynamic>;
   }
@@ -209,9 +202,6 @@ class ApiService {
   Future<void> cancelIntervention(String id, {String? reason}) =>
       post('/user/interventions/$id/cancel', data: {'reason': reason});
 
-  // AJOUTÉ : déclineIntervention() appelait par erreur cette méthode
-  // (endpoint CLIENT, jamais accessible à un prestataire) — nouveau
-  // endpoint dédié, correctement protégé côté provider.
   Future<void> declineDispatchedIntervention(String id) =>
       post('/provider/interventions/$id/decline');
 
@@ -220,8 +210,6 @@ class ApiService {
     return (res.data['data'] as List?) ?? [];
   }
 
-  // MODIFIÉ : le prestataire peut, au moment d'accepter, désigner
-  // directement un de ses assistants comme intervenant (null = lui-même).
   Future<Map<String, dynamic>> acceptIntervention(String id,
       {int? assignedAssistantId}) async {
     final res = await post('/provider/interventions/$id/accept',
@@ -243,7 +231,7 @@ class ApiService {
   Future<ProviderAssistant> createAssistant({
     required String name,
     String? phone,
-    String? photoBase64, // data:image/...;base64,...  (comme la photo prestataire)
+    String? photoBase64,
   }) async {
     final res = await post('/provider/assistants', data: {
       'name': name,
@@ -268,8 +256,6 @@ class ApiService {
 
   Future<void> deleteAssistant(int id) => delete('/provider/assistants/$id');
 
-  // Affecter / réaffecter l'intervenant d'une commande déjà acceptée.
-  // Passer null pour revenir à "moi-même".
   Future<Map<String, dynamic>> assignAssistant(
       String interventionId, int? assistantId) async {
     final res = await post('/provider/interventions/$interventionId/assign',
@@ -282,8 +268,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // MODIFIÉ : le prestataire doit désormais saisir le montant final
-  // réellement payé par le client avant de pouvoir terminer.
   Future<Map<String, dynamic>> completeIntervention(String id, {required double finalAmount}) async {
     final res = await post('/provider/interventions/$id/complete', data: {
       'final_amount': finalAmount,
@@ -291,10 +275,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // AJOUTÉ : aucune méthode n'existait pour noter le client après une
-  // intervention terminée — fonctionnalité prévue (cf. le texte déjà
-  // présent côté client "Les prestataires peuvent vous noter après une
-  // intervention") mais jamais implémentée d'aucun côté.
   Future<Map<String, dynamic>> submitReview({
     required String interventionId,
     required int    rating,
@@ -307,8 +287,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // AJOUTÉ : aucune méthode n'existait pour voir les avis côté Pro (ni
-  // reçus des clients, ni donnés aux clients).
   Future<List<dynamic>> getReviews() async {
     try {
       final res = await get('/provider/reviews');
@@ -388,7 +366,6 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  // NOUVEAU : recharge libre (remplace le choix de formule figée).
   Future<Map<String, dynamic>> rechargeProvider({
     required double amount,
     required String paymentMethod,
@@ -399,9 +376,7 @@ class ApiService {
     });
     return res.data as Map<String, dynamic>;
   }
-  // AJOUTÉ : recherche et commande de pièces automobiles auprès des
-  // magasins à proximité (rayon 3 km par défaut) — utile pendant une
-  // intervention.
+
   Future<List<dynamic>> searchParts({
     required String query,
     required double latitude,
