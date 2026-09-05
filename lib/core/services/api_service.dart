@@ -377,6 +377,55 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  Recharge DigitalPaye (Mobile Money reel)
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Initie une recharge via DigitalPaye.
+  ///
+  /// [operatorCode] : 'ORANGE_MONEY_CI' | 'MTN_MONEY_CI'
+  /// [otp] : requis pour Orange Money (code genere par le prestataire).
+  /// [payerPhone] : numero Mobile Money qui paie.
+  ///
+  /// Retourne { success, reference, status, payment_url, message }.
+  /// En cas d'erreur metier (OTP manquant, echec DigitalPaye...), Dio leve
+  /// une DioException dont response.data contient { message, code }.
+  Future<Map<String, dynamic>> initiateProviderRecharge({
+    required int amount,
+    required String operatorCode,
+    required String payerPhone,
+    String? otp,
+  }) async {
+    final res = await post('/provider/recharge/initiate', data: {
+      'amount':        amount,
+      'operator_code': operatorCode,
+      'payer_phone':   payerPhone,
+      if (otp != null && otp.isNotEmpty) 'otp': otp,
+    });
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  /// Recupere le statut d'une recharge : 'pending' | 'success' | 'failed'.
+  Future<Map<String, dynamic>> getProviderRechargeStatus(String reference) async {
+    final res = await get('/provider/recharge/$reference/status');
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  /// Retourne les magasins les plus proches sans critère de pièce.
+  /// Utilisé pour pré-remplir l'écran de recherche avant toute saisie.
+  Future<List<dynamic>> getNearbyStores({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 5,
+  }) async {
+    final res = await get('/provider/parts/stores/nearby', params: {
+      'latitude':  latitude,
+      'longitude': longitude,
+      'radius_km': radiusKm,
+    });
+    return res.data as List<dynamic>;
+  }
+
   Future<List<dynamic>> searchParts({
     required String query,
     required double latitude,
