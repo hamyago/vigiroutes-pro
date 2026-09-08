@@ -366,30 +366,18 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> rechargeProvider({
-    required double amount,
-    required String paymentMethod,
-  }) async {
-    final res = await post('/provider/subscription/recharge', data: {
-      'amount':         amount,
-      'payment_method': paymentMethod,
-    });
-    return res.data as Map<String, dynamic>;
-  }
-
   // ══════════════════════════════════════════════════════════════════════
-  //  Recharge DigitalPaye (Mobile Money reel)
+  //  Recharge DigitalPaye (Mobile Money réel — prestataire)
   // ══════════════════════════════════════════════════════════════════════
 
-  /// Initie une recharge via DigitalPaye.
+  /// Initie une recharge via DigitalPaye (prestataire).
   ///
-  /// [operatorCode] : 'ORANGE_MONEY_CI' | 'MTN_MONEY_CI'
-  /// [otp] : requis pour Orange Money (code genere par le prestataire).
-  /// [payerPhone] : numero Mobile Money qui paie.
+  /// [operatorCode] : 'ORANGE_MONEY_CI' | 'MTN_MONEY_CI' | 'WAVE_MONEY_CI'
+  /// [otp]         : requis uniquement pour Orange Money.
+  /// [payerPhone]  : numéro Mobile Money qui paie (10 chiffres).
   ///
-  /// Retourne { success, reference, status, payment_url, message }.
-  /// En cas d'erreur metier (OTP manquant, echec DigitalPaye...), Dio leve
-  /// une DioException dont response.data contient { message, code }.
+  /// Retourne { success, reference, status, payment_url?, message }.
+  /// Pour Wave, [payment_url] est non-null → ouvrir dans le navigateur.
   Future<Map<String, dynamic>> initiateProviderRecharge({
     required int amount,
     required String operatorCode,
@@ -405,14 +393,16 @@ class ApiService {
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  /// Recupere le statut d'une recharge : 'pending' | 'success' | 'failed'.
+  /// Récupère le statut d'une recharge : 'pending' | 'success' | 'failed'.
   Future<Map<String, dynamic>> getProviderRechargeStatus(String reference) async {
     final res = await get('/provider/recharge/$reference/status');
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  /// Retourne les magasins les plus proches sans critère de pièce.
-  /// Utilisé pour pré-remplir l'écran de recherche avant toute saisie.
+  // ══════════════════════════════════════════════════════════════════════
+  //  Pièces auto
+  // ══════════════════════════════════════════════════════════════════════
+
   Future<List<dynamic>> getNearbyStores({
     required double latitude,
     required double longitude,

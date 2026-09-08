@@ -22,4 +22,16 @@ class AppConstants {
   // SharedPreferences
   static const String prefOnboardingDone = 'onboarding_done';
   static const String prefFcmToken       = 'fcm_token';
+
+  // Recharge crédit
+  static const int minRecharge = 2000;
+
+  // Opérateurs Mobile Money actifs (recharge DigitalPaye)
+  // otp: true  → Orange Money nécessite un code OTP généré depuis le menu MM
+  // otp: false → Wave / MTN : redirection URL ou débit silencieux
+  static const List<Map<String, dynamic>> operators = [
+    {'code': 'ORANGE_MONEY_CI', 'label': '🟠 Orange Money', 'otp': true},
+    {'code': 'MTN_MONEY_CI',    'label': '🟡 MTN MoMo',     'otp': false},
+    {'code': 'WAVE_MONEY_CI',   'label': '🔵 Wave',          'otp': false},
+  ];
 }
