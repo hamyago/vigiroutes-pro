@@ -23,6 +23,10 @@ import '../../features/profile/screens/provider_rates_screen.dart';
 import '../../features/team/screens/team_screen.dart';
 import '../../features/subscription/screens/provider_subscription_screen.dart';
 import '../../features/home/controllers/provider_controller.dart';
+import '../../features/ct/screens/ct_missions_screen.dart';
+import '../../features/ct/screens/ct_mission_detail_screen.dart';
+import '../../features/ct/screens/ct_mission_report_screen.dart';
+import '../../features/ct/controllers/ct_controller.dart';
 
 GoRouter buildProviderRouter(AuthController auth) => GoRouter(
       initialLocation: '/',
@@ -73,8 +77,16 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
                 builder: (_, __) => const ProviderEarningsScreen()),
             GoRoute(path: '/provider/profile',
                 builder: (_, __) => const ProviderProfileScreen()),
+            GoRoute(path: '/provider/ct',
+                builder: (_, __) => const CtMissionsScreen()),
           ],
         ),
+
+        // ── CT missions (detail + rapport, hors shell) ────────────
+        GoRoute(path: '/provider/ct/:id', builder: (ctx, s) =>
+            CtMissionDetailScreen(missionId: s.pathParameters['id']!)),
+        GoRoute(path: '/provider/ct/:id/report', builder: (ctx, s) =>
+            CtMissionReportScreen(missionId: s.pathParameters['id']!)),
 
         GoRoute(path: '/provider/navigation/:id', builder: (ctx, s) =>
             ProviderNavigationScreen(
@@ -133,6 +145,10 @@ class _ProviderShellState extends State<_ProviderShell> {
       final ctrl     = context.read<ProviderController>();
       final provider = auth.provider;
       if (provider != null) ctrl.initialize(provider);
+      // Load CT missions if provider is CT accredited
+      if (provider != null && provider.isCTAccredited) {
+        context.read<CtController>().loadMissions();
+      }
     });
   }
 

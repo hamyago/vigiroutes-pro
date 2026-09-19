@@ -108,6 +108,7 @@ class ProviderModel {
   final String? idCardUrl;
   final String? proLicenseUrl;
   final List<String> serviceTypes;
+  final bool isCTAccredited;
   final double rating;
   final int ratingCount;
   final double totalEarnings;
@@ -128,6 +129,7 @@ class ProviderModel {
     this.idCardUrl,
     this.proLicenseUrl,
     required this.serviceTypes,
+    required this.isCTAccredited,
     required this.rating,
     required this.ratingCount,
     required this.totalEarnings,
@@ -150,6 +152,7 @@ class ProviderModel {
         proLicenseUrl:      json['pro_license_url'] as String?,
         serviceTypes:       (json['service_types'] as List?)
                                 ?.map((e) => e as String).toList() ?? [],
+        isCTAccredited:     json['is_ct_accredited'] as bool? ?? false,
         rating:             _numToDouble(json['rating']),
         ratingCount:        _numToInt(json['rating_count']),
         totalEarnings:      _numToDouble(json['total_earnings']),
