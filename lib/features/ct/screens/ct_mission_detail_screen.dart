@@ -56,7 +56,7 @@ class CtMissionDetailScreen extends StatelessWidget {
               children: [
                 _InfoRow('Marque / Modèle', '${mission.vehicleBrand} ${mission.vehicleModel}'),
                 _InfoRow('Immatriculation', mission.registrationNumber),
-                _InfoRow('Couleur', mission.vehicleColor),
+                _InfoRow('Couleur', mission.vehicleColor ?? '–'),
               ],
             ),
             const SizedBox(height: 16),
@@ -65,7 +65,7 @@ class CtMissionDetailScreen extends StatelessWidget {
               icon: Icons.person,
               children: [
                 _InfoRow('Nom', mission.clientName),
-                _InfoRow('Téléphone', mission.clientPhone),
+                _InfoRow('Téléphone', mission.clientPhone ?? '–'),
               ],
             ),
             const SizedBox(height: 16),
@@ -110,9 +110,9 @@ class _StatusBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.1),
+        color: _color.withAlpha(25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _color.withOpacity(0.3)),
+        border: Border.all(color: _color.withAlpha(77)),
       ),
       child: Row(
         children: [
@@ -174,7 +174,7 @@ class _CenterCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -337,7 +337,7 @@ class _InfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -384,7 +384,7 @@ class _InfoRow extends StatelessWidget {
             width: 130,
             child: Text(
               label,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ),
           Expanded(
