@@ -108,7 +108,6 @@ class ProviderModel {
   final String? idCardUrl;
   final String? proLicenseUrl;
   final List<String> serviceTypes;
-  final bool isCTAccredited;
   final double rating;
   final int ratingCount;
   final double totalEarnings;
@@ -129,7 +128,6 @@ class ProviderModel {
     this.idCardUrl,
     this.proLicenseUrl,
     required this.serviceTypes,
-    required this.isCTAccredited,
     required this.rating,
     required this.ratingCount,
     required this.totalEarnings,
@@ -152,7 +150,6 @@ class ProviderModel {
         proLicenseUrl:      json['pro_license_url'] as String?,
         serviceTypes:       (json['service_types'] as List?)
                                 ?.map((e) => e as String).toList() ?? [],
-        isCTAccredited:     json['is_ct_accredited'] as bool? ?? false,
         rating:             _numToDouble(json['rating']),
         ratingCount:        _numToInt(json['rating_count']),
         totalEarnings:      _numToDouble(json['total_earnings']),
@@ -194,6 +191,20 @@ class InterventionModel {
   final ProviderModel? provider;
   final ProviderAssistant? assignedAssistant;
 
+  // ── Champs Contrôle Technique (CT) ─────────────────────────────────────────
+  // Présents uniquement quand serviceTypeName == 'ct_transport' (remorquage
+  // vers un centre de contrôle technique). L'admin octroie le badge CT au
+  // prestataire depuis le dashboard admin. La mission CT a deux phases :
+  //   'pickup'   → aller chercher le client à userLatitude/userLongitude
+  //   'delivery' → transporter le véhicule au centre CT
+  final bool isCTTransport;
+  final String? ctBookingId;       // ID de la réservation CT liée
+  final String? ctCenterName;      // Nom du centre CT de destination
+  final String? ctCenterAddress;   // Adresse lisible du centre CT
+  final double? ctCenterLatitude;  // Coordonnées du centre CT
+  final double? ctCenterLongitude;
+  final String ctPhase;            // 'pickup' | 'delivery'
+
   const InterventionModel({
     required this.id,
     required this.userId,
@@ -224,6 +235,13 @@ class InterventionModel {
     this.completedAt,
     this.provider,
     this.assignedAssistant,
+    this.isCTTransport = false,
+    this.ctBookingId,
+    this.ctCenterName,
+    this.ctCenterAddress,
+    this.ctCenterLatitude,
+    this.ctCenterLongitude,
+    this.ctPhase = 'pickup',
   });
 
   bool get isPending    => status == 'pending' || status == 'dispatching';
@@ -233,7 +251,12 @@ class InterventionModel {
   bool get isCancelled  => status == 'cancelled';
   bool get isActive     => isPending || isAccepted || isInProgress;
 
-  factory InterventionModel.fromJson(Map<String, dynamic> json) => InterventionModel(
+  /// Vrai quand le prestataire a confirmé le ramassage et navigue vers le centre
+  bool get isInDeliveryPhase => isCTTransport && ctPhase == 'delivery';
+
+  factory InterventionModel.fromJson(Map<String, dynamic> json) {
+    final ctData = json['ct'] as Map<String, dynamic>?;
+    return InterventionModel(
         id:                          json['id'] as String,
         userId:                      json['user_id'] as String,
         userName:                    json['user_name'] as String? ??
@@ -270,7 +293,15 @@ class InterventionModel {
         assignedAssistant: json['assigned_assistant'] != null
             ? ProviderAssistant.fromJson(json['assigned_assistant'] as Map<String, dynamic>)
             : null,
-      );
+        isCTTransport:      json['is_ct_transport'] as bool? ?? false,
+        ctBookingId:        ctData?['booking_id'] as String? ?? json['ct_booking_id'] as String?,
+        ctCenterName:       ctData?['center_name'] as String? ?? json['ct_center_name'] as String?,
+        ctCenterAddress:    ctData?['center_address'] as String? ?? json['ct_center_address'] as String?,
+        ctCenterLatitude:   _numToDoubleN(ctData?['center_latitude'] ?? json['ct_center_latitude']),
+        ctCenterLongitude:  _numToDoubleN(ctData?['center_longitude'] ?? json['ct_center_longitude']),
+        ctPhase:            json['ct_phase'] as String? ?? 'pickup',
+    );
+  }
 
   /// Mise à jour partielle depuis un événement WebSocket
   InterventionModel copyWithWs(Map<String, dynamic> data) => InterventionModel(
@@ -307,7 +338,17 @@ class InterventionModel {
         assignedAssistant: data['assigned_assistant'] != null
             ? ProviderAssistant.fromJson(data['assigned_assistant'] as Map<String, dynamic>)
             : assignedAssistant,
+        isCTTransport:     isCTTransport,
+        ctBookingId:       ctBookingId,
+        ctCenterName:      ctCenterName,
+        ctCenterAddress:   ctCenterAddress,
+        ctCenterLatitude:  ctCenterLatitude,
+        ctCenterLongitude: ctCenterLongitude,
+        ctPhase:           data['ct_phase'] as String? ?? ctPhase,
       );
+
+  /// Passe à la phase livraison (après ramassage confirmé)
+  InterventionModel toDeliveryPhase() => copyWithWs({'ct_phase': 'delivery'});
 }
 
 // ── ReviewModel ──────────────────────────────────────────────────────────────
@@ -406,9 +447,6 @@ class StoreModel {
         address:    json['address'] as String?,
         latitude:   _numOrNull(json['latitude']),
         longitude:  _numOrNull(json['longitude']),
-        // BUG CORRIGÉ : distance_km vient d'une expression SQL brute
-        // (formule haversine), renvoyée en chaîne de texte par
-        // PostgreSQL/PHP — le cast `as num?` plantait systématiquement.
         distanceKm: _numOrNull(json['distance_km']),
         rating:     _num(json['rating']),
         ratingCount:(json['rating_count'] as num?)?.toInt() ?? int.tryParse(json['rating_count']?.toString() ?? '') ?? 0,

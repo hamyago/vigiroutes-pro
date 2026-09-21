@@ -9,6 +9,7 @@ import '../../features/auth/screens/otp_screen.dart';
 import '../../features/auth/screens/profile_setup_screen.dart';
 import '../../features/home/screens/provider_home_screen.dart';
 import '../../features/interventions/screens/provider_navigation_screen.dart';
+import '../../features/interventions/screens/ct_transport_screen.dart';
 import '../../features/reviews/screens/review_client_screen.dart';
 import '../../features/reviews/screens/provider_reviews_screen.dart';
 import '../../features/parts/screens/parts_search_screen.dart';
@@ -23,10 +24,6 @@ import '../../features/profile/screens/provider_rates_screen.dart';
 import '../../features/team/screens/team_screen.dart';
 import '../../features/subscription/screens/provider_subscription_screen.dart';
 import '../../features/home/controllers/provider_controller.dart';
-import '../../features/ct/screens/ct_missions_screen.dart';
-import '../../features/ct/screens/ct_mission_detail_screen.dart';
-import '../../features/ct/screens/ct_mission_report_screen.dart';
-import '../../features/ct/controllers/ct_controller.dart';
 
 GoRouter buildProviderRouter(AuthController auth) => GoRouter(
       initialLocation: '/',
@@ -77,19 +74,19 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
                 builder: (_, __) => const ProviderEarningsScreen()),
             GoRoute(path: '/provider/profile',
                 builder: (_, __) => const ProviderProfileScreen()),
-            GoRoute(path: '/provider/ct',
-                builder: (_, __) => const CtMissionsScreen()),
           ],
         ),
 
-        // ── CT missions (detail + rapport, hors shell) ────────────
-        GoRoute(path: '/provider/ct/:id', builder: (ctx, s) =>
-            CtMissionDetailScreen(missionId: s.pathParameters['id']!)),
-        GoRoute(path: '/provider/ct/:id/report', builder: (ctx, s) =>
-            CtMissionReportScreen(missionId: s.pathParameters['id']!)),
-
+        // ── Navigation dépannage standard ──────────────────────────
         GoRoute(path: '/provider/navigation/:id', builder: (ctx, s) =>
             ProviderNavigationScreen(
+                interventionId: s.pathParameters['id']!)),
+
+        // ── Mission CT (remorquage vers centre contrôle technique) ──
+        // Ouvrir depuis provider_home_screen quand isCTTransport == true
+        // à la place de /provider/navigation/:id
+        GoRoute(path: '/provider/ct-transport/:id', builder: (ctx, s) =>
+            CTTransportScreen(
                 interventionId: s.pathParameters['id']!)),
 
         GoRoute(path: '/provider/review/:id', builder: (ctx, s) =>
@@ -145,10 +142,6 @@ class _ProviderShellState extends State<_ProviderShell> {
       final ctrl     = context.read<ProviderController>();
       final provider = auth.provider;
       if (provider != null) ctrl.initialize(provider);
-      // Load CT missions if provider is CT accredited
-      if (provider != null && provider.isCTAccredited) {
-        context.read<CtController>().loadMissions();
-      }
     });
   }
 

@@ -258,7 +258,9 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                                 req.id, assignedAssistantId: assistantId);
                             if (!context.mounted) return;
                             if (ok) {
-                              context.push('/provider/navigation/${req.id}');
+                              context.push(req.isCTTransport
+                                  ? '/provider/ct-transport/${req.ctBookingId ?? req.id}'
+                                  : '/provider/navigation/${req.id}');
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                   content: Text(ctrl.actionError ??
@@ -341,61 +343,70 @@ class _ActiveInterventionCard extends StatelessWidget {
       {required this.intervention, required this.ctrl});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppColors.primary, AppColors.primaryDark],
+  Widget build(BuildContext context) {
+    final isCT = intervention.isCTTransport;
+    final route = isCT
+        ? '/provider/ct-transport/${intervention.ctBookingId ?? intervention.id}'
+        : '/provider/navigation/${intervention.id}';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isCT
+              ? [Colors.green.shade600, Colors.green.shade800]
+              : [AppColors.primary, AppColors.primaryDark],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isCT ? '🚗 Mission CT en cours' : '🔧 Intervention en cours',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
           ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '🔧 Intervention en cours',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
+          const SizedBox(height: 8),
+          Text(
+            '${intervention.serviceTypeName} — ${intervention.userName ?? "Client"}',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.9)),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => context.push(route),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white),
+                    minimumSize: const Size(0, 40),
+                  ),
+                  child: const Text('Démarrer'),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${intervention.serviceTypeName} — ${intervention.userName ?? "Client"}',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.9)),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => context.push('/provider/navigation/${intervention.id}'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white),
-                      minimumSize: const Size(0, 40),
-                    ),
-                    child: const Text('Démarrer'),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => context.push(route),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    minimumSize: const Size(0, 40),
                   ),
+                  child: Text(isCT ? 'Continuer' : 'Terminer'),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => context.push('/provider/navigation/${intervention.id}'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primary,
-                      minimumSize: const Size(0, 40),
-                    ),
-                    child: const Text('Terminer'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RequestCard extends StatelessWidget {
@@ -526,4 +537,3 @@ class _RequestCard extends StatelessWidget {
     return icons[id] ?? '🛠️';
   }
 }
-
