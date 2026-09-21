@@ -125,7 +125,7 @@ class _CTTransportScreenState extends State<CTTransportScreen>
       final resp = await _api
           .get('/v1/ct/missions/${widget.interventionId}')
           .timeout(const Duration(seconds: 20));
-      final data = resp['data'];
+      final data = resp.data['data'];
       if (mounted) {
         setState(() => _mission = _CTMission.fromJson(data as Map<String, dynamic>));
       }
