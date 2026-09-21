@@ -233,7 +233,7 @@ class _CTTransportScreenState extends State<CTTransportScreen>
     try {
       await _api.patch(
         '/v1/ct/missions/${widget.interventionId}/status',
-        body: {'status': status},
+        data: {'status': status},
       );
       if (mounted) {
         setState(() {

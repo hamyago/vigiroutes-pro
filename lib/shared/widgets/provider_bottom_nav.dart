@@ -12,7 +12,8 @@ class ProviderBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     final auth = context.watch<AuthController>();
-    final isCT = auth.provider?.isCTAccredited ?? false;
+    // isCTAccredited : vrai si le prestataire propose le type 'ct_transport'
+    final isCT = auth.provider?.serviceTypes.contains('ct_transport') ?? false;
 
     if (isCT) {
       return _buildWithCT(context, location);
