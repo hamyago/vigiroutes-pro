@@ -23,6 +23,9 @@ import '../../features/profile/screens/provider_subscription_history_screen.dart
 import '../../features/profile/screens/provider_rates_screen.dart';
 import '../../features/team/screens/team_screen.dart';
 import '../../features/subscription/screens/provider_subscription_screen.dart';
+import '../../features/ct/screens/ct_missions_screen.dart';
+import '../../features/ct/screens/ct_mission_detail_screen.dart';
+import '../../features/ct/screens/ct_mission_report_screen.dart';
 import '../../features/home/controllers/provider_controller.dart';
 
 GoRouter buildProviderRouter(AuthController auth) => GoRouter(
@@ -122,6 +125,14 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
         // ── Mon équipe (assistants) ───────────────────────────────
         GoRoute(path: '/provider/team', builder: (ctx, s) =>
             const TeamScreen()),
+
+        // ── Missions CT (opérateur de centre de contrôle technique) ──
+        GoRoute(path: '/provider/ct', builder: (_, __) =>
+            const CtMissionsScreen()),
+        GoRoute(path: '/provider/ct/:id', builder: (ctx, s) =>
+            CtMissionDetailScreen(missionId: s.pathParameters['id']!)),
+        GoRoute(path: '/provider/ct/:id/report', builder: (ctx, s) =>
+            CtMissionReportScreen(missionId: s.pathParameters['id']!)),
       ],
     );
 

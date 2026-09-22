@@ -187,10 +187,10 @@ class _RatesCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 8,
               ),
             ],
@@ -329,7 +329,7 @@ class _InfoCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -448,7 +448,7 @@ class _KycCardState extends State<_KycCard> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -516,7 +516,7 @@ class _StatsCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

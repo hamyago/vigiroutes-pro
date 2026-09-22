@@ -34,7 +34,6 @@ class _SplashScreenState extends State<SplashScreen>
   ];
   int    _tagIndex    = 0;
   String _displayedTag = '';
-  final bool   _typingDone  = false;
 
   @override
   void initState() {

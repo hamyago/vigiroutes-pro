@@ -410,7 +410,7 @@ class _ActiveInterventionCard extends StatelessWidget {
 }
 
 class _RequestCard extends StatelessWidget {
-  final dynamic request;
+  final InterventionModel request;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
   const _RequestCard({

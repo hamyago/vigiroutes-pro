@@ -70,7 +70,7 @@ class _CtMissionReportScreenState extends State<CtMissionReportScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        leading: BackButton(color: AppColors.textPrimary),
+        leading: BackButton(style: ButtonStyle(iconColor: WidgetStatePropertyAll(AppColors.textPrimary))),
         title: const Text(
           'Rapport CT',
           style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 17),

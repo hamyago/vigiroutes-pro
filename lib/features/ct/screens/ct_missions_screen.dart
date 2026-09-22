@@ -94,7 +94,7 @@ class _MissionList extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.directions_car_outlined,
-                size: 64, color: AppColors.textMuted.withOpacity(0.5)),
+                size: 64, color: AppColors.textMuted.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             const Text(
               'Aucune mission CT',
@@ -144,7 +144,7 @@ class _MissionCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -158,7 +158,7 @@ class _MissionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor.withOpacity(0.12),
+                    color: _statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
