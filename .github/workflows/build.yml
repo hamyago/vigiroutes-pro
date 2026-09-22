@@ -49,19 +49,8 @@ jobs:
         run: |
           rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_provider
 
-      - name: Debug signing config
-        run: |
-          echo "=== android/app/ ==="
-          ls -la android/app/
-          echo "=== key.properties ==="
-          cat android/key.properties
-          echo "=== Taille keystore ==="
-          wc -c android/app/vigiroutes-release.jks
-
       - name: Build APK Release
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: flutter build apk --release --android-skip-build-dependency-validation -P MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
