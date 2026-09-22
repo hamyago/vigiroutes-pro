@@ -29,7 +29,8 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
+          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" >> android/local.properties
 
       - name: Decode keystore
         run: |
@@ -49,8 +50,19 @@ jobs:
         run: |
           rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_provider
 
-      - name: Build APK Release
-        run: flutter build apk --release --android-skip-build-dependency-validation
+      - name: Generate Flutter build files
+        run: flutter build apk --config-only
+
+      - name: Build APK with Gradle
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Locate and copy APK
+        run: |
+          find . -name "*.apk" -path "*/release/*" | head -5
+          mkdir -p build/app/outputs/flutter-apk/
+          cp android/app/build/outputs/apk/release/app-release.apk build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
