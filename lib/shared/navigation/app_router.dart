@@ -34,18 +34,28 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
       redirect: (ctx, state) {
         final isAuth    = auth.state == AuthState.authenticated;
         final isLoading = auth.state == AuthState.unknown;
-        final onSplash  = state.matchedLocation == '/';
-        final onAuth    = state.matchedLocation.startsWith('/auth');
+        final loc       = state.matchedLocation;
+        final onSplash  = loc == '/';
+        final onAuth    = loc.startsWith('/auth');
+        final onProvider = loc.startsWith('/provider');
 
+        // Ne jamais rediriger depuis le splash ou les routes auth
         if (onSplash) return null;
         if (onAuth)   return null;
+
+        // Tant que l'état est inconnu, on attend
         if (isLoading) return null;
 
-        if (!isAuth && state.matchedLocation != '/onboarding') {
+        // Si authentifié et sur une route provider → laisser passer sans rediriger
+        if (isAuth && onProvider) return null;
+
+        // Si non authentifié et pas sur onboarding → renvoyer vers onboarding
+        if (!isAuth && loc != '/onboarding') {
           return '/onboarding';
         }
 
-        if (isAuth && state.matchedLocation == '/onboarding') {
+        // Si authentifié et sur onboarding → accueil provider
+        if (isAuth && loc == '/onboarding') {
           return '/provider/home';
         }
 

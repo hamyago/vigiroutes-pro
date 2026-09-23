@@ -242,12 +242,20 @@ class AuthController extends ChangeNotifier {
         _provider = ProviderModel.fromJson(Map<String, dynamic>.from(data));
         _state    = AuthState.authenticated;
       } else {
-        _state = AuthState.unauthenticated;
+        // Réponse inattendue mais pas une erreur réseau → on garde l'état actuel
+        if (_state == AuthState.unknown) _state = AuthState.unauthenticated;
       }
       notifyListeners();
     } catch (e) {
       debugPrint('[ProviderAuth] _refreshProvider error: $e');
-      _state = AuthState.unauthenticated;
+      // Erreur réseau / timeout : NE PAS déconnecter si on était déjà authentifié.
+      // Seul un 401 déclenche la déconnexion (géré par onUnauthorized dans le constructeur).
+      final msg = e.toString();
+      final is401 = msg.contains('401') || msg.contains('Unauthorized');
+      if (is401 || _state == AuthState.unknown) {
+        _state = AuthState.unauthenticated;
+      }
+      // Si on était authenticated et que c'est une erreur réseau, on garde l'état.
       notifyListeners();
     }
   }

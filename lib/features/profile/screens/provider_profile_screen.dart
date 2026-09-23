@@ -261,14 +261,20 @@ class _PhotoAvatarState extends State<_PhotoAvatar> {
         'photo_base64': 'data:image/$ext;base64,$base64Image',
       });
 
-      // Rafraîchir le profil
+      // Rafraîchir le profil (silencieux si erreur réseau)
       if (mounted) {
         final auth = context.read<AuthController>();
-        await auth.refreshProvider();
+        try {
+          await auth.refreshProvider();
+        } catch (_) {
+          // Erreur réseau non fatale : la photo est uploadée, on continue
+        }
         setState(() => _cacheKey = DateTime.now().millisecondsSinceEpoch);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Photo mise à jour ✅'),
-            backgroundColor: AppColors.success));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Photo mise à jour ✅'),
+              backgroundColor: AppColors.success));
+        }
       }
     } catch (e) {
       if (mounted) {
