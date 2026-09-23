@@ -192,18 +192,13 @@ class InterventionModel {
   final ProviderAssistant? assignedAssistant;
 
   // ── Champs Contrôle Technique (CT) ─────────────────────────────────────────
-  // Présents uniquement quand serviceTypeName == 'ct_transport' (remorquage
-  // vers un centre de contrôle technique). L'admin octroie le badge CT au
-  // prestataire depuis le dashboard admin. La mission CT a deux phases :
-  //   'pickup'   → aller chercher le client à userLatitude/userLongitude
-  //   'delivery' → transporter le véhicule au centre CT
   final bool isCTTransport;
-  final String? ctBookingId;       // ID de la réservation CT liée
-  final String? ctCenterName;      // Nom du centre CT de destination
-  final String? ctCenterAddress;   // Adresse lisible du centre CT
-  final double? ctCenterLatitude;  // Coordonnées du centre CT
+  final String? ctBookingId;
+  final String? ctCenterName;
+  final String? ctCenterAddress;
+  final double? ctCenterLatitude;
   final double? ctCenterLongitude;
-  final String ctPhase;            // 'pickup' | 'delivery'
+  final String ctPhase;
 
   const InterventionModel({
     required this.id,
@@ -253,6 +248,21 @@ class InterventionModel {
 
   /// Vrai quand le prestataire a confirmé le ramassage et navigue vers le centre
   bool get isInDeliveryPhase => isCTTransport && ctPhase == 'delivery';
+
+  // ── Alias sémantiques pour l'alerte vocale Option C ──────────────────────
+  // Évite de modifier provider_controller ou alert_service quand les noms de
+  // champs changent : un seul endroit à adapter.
+
+  /// Nom du client (utilisateur qui a passé la commande).
+  String? get clientName => userName;
+
+  /// Adresse de prise en charge (là où le client est en panne).
+  String? get address => userAddress;
+
+  /// Montant estimé pour la voix — affiche le total sans commission.
+  String? get estimatedPrice => totalPrice > 0
+      ? totalPrice.toStringAsFixed(0)
+      : null;
 
   factory InterventionModel.fromJson(Map<String, dynamic> json) {
     final ctData = json['ct'] as Map<String, dynamic>?;
@@ -352,7 +362,6 @@ class InterventionModel {
 }
 
 // ── ReviewModel ──────────────────────────────────────────────────────────────
-// AJOUTÉ : n'existait pas côté Pro (aucun écran d'avis n'existait avant).
 
 class ReviewModel {
   final String id;
@@ -381,8 +390,6 @@ class ReviewModel {
 }
 
 // ── Pièces automobiles (magasins) ─────────────────────────────────────────────
-// AJOUTÉ : commande de pièces auprès des magasins à proximité, pendant
-// une intervention par exemple.
 
 class StoreProductModel {
   final String id;
@@ -507,10 +514,6 @@ class PartOrderModel {
 }
 
 // ── Helpers de parsing tolérants ─────────────────────────────────────────────
-// Laravel sérialise les colonnes DECIMAL en CHAÎNES ("5.3301"). Un cast direct
-// `as num` sur une chaîne lève une exception et faisait planter le parsing
-// (et donc le login : « connexion au serveur »). Ces helpers acceptent num,
-// String ou null.
 double _numToDouble(dynamic v, [double fallback = 0]) {
   if (v == null) return fallback;
   if (v is num) return v.toDouble();

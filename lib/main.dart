@@ -4,8 +4,10 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'core/services/alert_service.dart';
 import 'core/services/api_service.dart';
 import 'core/services/service_type_service.dart';
 import 'features/auth/controllers/auth_controller.dart';
@@ -14,8 +16,79 @@ import 'features/ct/controllers/ct_controller.dart';
 import 'core/theme/theme_controller.dart';
 import 'shared/navigation/app_router.dart';
 
+// ── Canal Android haute priorité pour les alertes de dispatch ──────────────
+
+const AndroidNotificationChannel _dispatchChannel = AndroidNotificationChannel(
+  'dispatch_alerts',           // id (doit correspondre au channel côté serveur)
+  'Nouvelles courses',         // nom affiché dans les paramètres
+  description : 'Alertes de nouvelles demandes d\'intervention',
+  importance  : Importance.max,
+  playSound   : true,
+  enableVibration: true,
+);
+
+final FlutterLocalNotificationsPlugin _localNotifications =
+    FlutterLocalNotificationsPlugin();
+
+// ── Handler background / terminated ───────────────────────────────────────
+//
+// IMPORTANT : ce handler tourne dans un isolate séparé. On ne peut PAS
+// utiliser ProviderAlertService ici (AudioPlayer / FlutterTts ne sont pas
+// disponibles hors de l'isolate principal). On affiche donc une notification
+// locale haute priorité via flutter_local_notifications — Android la montre
+// avec vibration + son système, et l'utilisateur tape dessus pour ouvrir
+// l'app (qui relancera l'alarme via _bootstrapDispatch dans ProviderController).
 @pragma('vm:entry-point')
-Future<void> _bgHandler(RemoteMessage message) async {}
+Future<void> _bgHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  final data = message.data;
+  if (data['type'] != 'dispatch_alert') return;
+
+  // Initialisation minimale de flutter_local_notifications dans cet isolate.
+  final plugin = FlutterLocalNotificationsPlugin();
+  await plugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS    : DarwinInitializationSettings(),
+    ),
+  );
+
+  final clientName  = data['client_name']     as String? ?? 'Client';
+  final serviceType = data['service_type']    as String? ?? '';
+  final address     = data['address']         as String? ?? '';
+
+  final body = [
+    if (serviceType.isNotEmpty) serviceType,
+    if (address.isNotEmpty) address,
+  ].join(' · ');
+
+  await plugin.show(
+    0,
+    '🆕 Nouvelle course — $clientName',
+    body.isNotEmpty ? body : 'Appuyez pour voir la demande',
+    NotificationDetails(
+      android: AndroidNotificationDetails(
+        'dispatch_alerts',
+        'Nouvelles courses',
+        channelDescription: 'Alertes de nouvelles demandes d\'intervention',
+        importance     : Importance.max,
+        priority       : Priority.high,
+        fullScreenIntent: true,      // affiche même si l'écran est verrouillé
+        playSound      : true,
+        enableVibration: true,
+        ticker         : 'Nouvelle course',
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    ),
+  );
+}
+
+// ── Entrée principale ─────────────────────────────────────────────────────
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +111,7 @@ void main() async {
 
   await Firebase.initializeApp();
 
-  // Crashlytics
+  // ── Crashlytics ────────────────────────────────────────────────────────
   await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
   PlatformDispatcher.instance.onError = (error, stack) {
@@ -52,14 +125,42 @@ void main() async {
     );
   }).sendPort);
 
+  // ── FCM background handler ─────────────────────────────────────────────
   FirebaseMessaging.onBackgroundMessage(_bgHandler);
+
+  // ── Permissions FCM ────────────────────────────────────────────────────
   await FirebaseMessaging.instance.requestPermission(
     alert: true, sound: true, badge: true,
   );
+
+  // ── flutter_local_notifications — canal Android haute priorité ────────
+  await _localNotifications.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS    : DarwinInitializationSettings(
+        requestAlertPermission: false, // déjà demandé via FCM ci-dessus
+        requestSoundPermission: false,
+        requestBadgePermission: false,
+      ),
+    ),
+  );
+
+  // Créer le canal Android (no-op si déjà créé)
+  await _localNotifications
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_dispatchChannel);
+
+  // ── Pré-initialiser le TTS (warm-up) ──────────────────────────────────
+  await ProviderAlertService.instance.init();
+
+  // ── Services ───────────────────────────────────────────────────────────
   ApiService.instance.init();
   ServiceTypeService.instance.load();
+
   runApp(const AutoSosProviderApp());
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class AutoSosProviderApp extends StatelessWidget {
   const AutoSosProviderApp({super.key});

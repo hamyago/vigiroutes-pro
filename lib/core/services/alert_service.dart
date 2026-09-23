@@ -1,79 +1,138 @@
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
-/// Alerte « nouvelle commande » pour le prestataire :
-/// - joue `assets/raw/alarm.wav` EN BOUCLE (comme une sonnerie) tant que le
-///   prestataire n'a pas accepté/refusé,
-/// - annonce vocalement en français qu'une commande est en attente.
+/// Service d'alerte sonore + vocale pour les nouvelles courses.
 ///
-/// L'alarme est idempotente par commande (voir [stop]/[newOrder]) pour ne pas
-/// re-sonner à chaque tick WebSocket de la même demande.
+/// Option C — Complet :
+///   "Nouvelle course ! Client : [nom]. Type : [service].
+///    Adresse : [adresse]. Montant estimé : [montant] francs."
+///
+/// Usage :
+///   ProviderAlertService.instance.newOrder(
+///     dispatchId : '42',
+///     clientName : 'Moussa Diallo',
+///     serviceType: 'Dépannage pneu',
+///     address    : 'Avenue Cheikh Anta Diop, Dakar',
+///     estimatedPrice: '15000',
+///   );
 class ProviderAlertService {
   ProviderAlertService._();
-  static final ProviderAlertService instance = ProviderAlertService._();
+  static final instance = ProviderAlertService._();
 
-  final AudioPlayer _player = AudioPlayer();
-  final FlutterTts _tts = FlutterTts();
-  bool _ttsReady = false;
+  final _player = AudioPlayer();
+  final _tts    = FlutterTts();
+
   String? _ringingDispatchId;
+  bool    _ttsReady = false;
 
-  Future<void> _ensureTts() async {
-    if (_ttsReady) return;
-    try {
-      await _tts.setLanguage('fr-FR');
-      await _tts.setSpeechRate(0.5);
-      await _tts.setPitch(1.0);
-      await _tts.setVolume(1.0);
-      _ttsReady = true;
-    } catch (e) {
-      debugPrint('[ProviderAlert] init TTS: $e');
-    }
+  // ── Initialisation TTS (appelée une fois au démarrage) ─────────────────
+
+  Future<void> init() async {
+    await _tts.setLanguage('fr-FR');
+    await _tts.setSpeechRate(0.48);
+    await _tts.setVolume(1.0);
+    await _tts.setPitch(1.0);
+
+    // Certains moteurs ont besoin d'un "warm-up" silencieux.
+    await _tts.speak(' ');
+    await _tts.stop();
+
+    _ttsReady = true;
   }
 
-  /// Démarre la sonnerie + l'annonce pour une nouvelle commande.
-  /// Ne fait rien si la même commande sonne déjà.
-  Future<void> newOrder({required String dispatchId, String? serviceName}) async {
+  // ── Déclenchement alerte ───────────────────────────────────────────────
+
+  /// Lance l'alarme sonore en boucle + annonce vocale détaillée.
+  ///
+  /// [dispatchId]     : identifiant unique de la course (évite les doublons).
+  /// [clientName]     : nom complet du client.
+  /// [serviceType]    : type de service (dépannage pneu, remorquage…).
+  /// [address]        : adresse / lieu de la panne.
+  /// [estimatedPrice] : montant estimé en FCFA (string, peut être vide).
+  Future<void> newOrder({
+    required String dispatchId,
+    String? clientName,
+    String? serviceType,
+    String? address,
+    String? estimatedPrice,
+  }) async {
+    // Idempotent : on ne re-sonne pas pour la même course.
     if (_ringingDispatchId == dispatchId) return;
     _ringingDispatchId = dispatchId;
 
-    // Sonnerie en boucle
+    // ── 1. Alarme sonore en boucle ────────────────────────────────────────
     try {
-      await _player.stop();
       await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.play(AssetSource('raw/alarm.wav'), volume: 1.0);
-    } catch (e) {
-      debugPrint('[ProviderAlert] alarme: $e');
+      await _player.play(AssetSource('raw/alarm.wav'));
+    } catch (_) {
+      // Fichier audio absent ou erreur → on continue quand même avec la voix.
     }
 
-    // Annonce vocale (une fois)
-    await _ensureTts();
-    final svc = (serviceName != null && serviceName.trim().isNotEmpty)
-        ? ' pour ${serviceName.trim()}'
-        : '';
-    try {
-      await _tts.speak(
-          'Nouvelle commande$svc ! Un client a besoin de vous. '
-          'Veuillez accepter ou refuser la demande.');
-    } catch (e) {
-      debugPrint('[ProviderAlert] TTS: $e');
-    }
+    // ── 2. Annonce vocale détaillée (Option C) ────────────────────────────
+    await Future.delayed(const Duration(milliseconds: 800)); // laisse le son démarrer
+    await _speakDetails(
+      clientName    : clientName,
+      serviceType   : serviceType,
+      address       : address,
+      estimatedPrice: estimatedPrice,
+    );
   }
 
-  /// Arrête la sonnerie et la voix (à l'acceptation, au refus, ou si la
-  /// demande est résolue/expirée). Réarme pour la prochaine commande.
+  // ── Arrêt ──────────────────────────────────────────────────────────────
+
   Future<void> stop() async {
     _ringingDispatchId = null;
-    try {
-      await _player.stop();
-    } catch (_) {}
-    try {
-      await _tts.stop();
-    } catch (_) {}
+    await _player.stop();
+    await _tts.stop();
   }
 
-  Future<void> dispose() async {
-    await _player.dispose();
-    await _tts.stop();
+  // ── Lecture vocale ─────────────────────────────────────────────────────
+
+  Future<void> _speakDetails({
+    String? clientName,
+    String? serviceType,
+    String? address,
+    String? estimatedPrice,
+  }) async {
+    if (!_ttsReady) {
+      await init(); // init de secours
+    }
+
+    final parts = <String>['Nouvelle course !'];
+
+    if (clientName != null && clientName.trim().isNotEmpty) {
+      parts.add('Client : ${clientName.trim()}.');
+    }
+
+    if (serviceType != null && serviceType.trim().isNotEmpty) {
+      parts.add('Type : ${serviceType.trim()}.');
+    }
+
+    if (address != null && address.trim().isNotEmpty) {
+      parts.add('Adresse : ${address.trim()}.');
+    }
+
+    if (estimatedPrice != null && estimatedPrice.trim().isNotEmpty) {
+      final price = estimatedPrice.trim().replaceAll(RegExp(r'[^0-9]'), '');
+      if (price.isNotEmpty) {
+        parts.add('Montant estimé : $price francs.');
+      }
+    }
+
+    parts.add('Veuillez accepter ou refuser la demande.');
+
+    final fullText = parts.join(' ');
+
+    try {
+      await _tts.speak(fullText);
+
+      // Répète l'annonce une 2e fois après 4 s pour s'assurer que le prestataire l'entend.
+      await Future.delayed(const Duration(seconds: 4));
+      if (_ringingDispatchId != null) {
+        await _tts.speak(fullText);
+      }
+    } catch (_) {
+      // TTS non disponible → l'alarme sonore suffit.
+    }
   }
 }

@@ -86,23 +86,19 @@ class ProviderController extends ChangeNotifier {
     await _loadInterventions();
     final pending = pendingRequests;
     if (pending.isNotEmpty) {
+      final first = pending.first;
       ProviderAlertService.instance.newOrder(
-        dispatchId:  pending.first.id,
-        serviceName: pending.first.serviceTypeName,
+        dispatchId    : first.id,
+        clientName    : first.clientName,
+        serviceType   : first.serviceTypeName,
+        address       : first.address,
+        estimatedPrice: first.estimatedPrice?.toString(),
       );
       notifyListeners();
     }
   }
 
   // ── Rafraîchissement automatique par sondage (secours) ──────────────────
-  // AJOUTÉ : malgré plusieurs corrections successives (auth de canal,
-  // jeton Firebase périmé...), la fiabilité du WebSocket en conditions
-  // réelles n'a pas pu être confirmée. Ce sondage toutes les 4s repose
-  // uniquement sur les endpoints REST, dont le bon fonctionnement a été
-  // vérifié à de multiples reprises tout au long des sessions de debug -
-  // garantie de secours simple, robuste, et qui ne dépend d'aucune
-  // configuration WebSocket/Reverb. Tourne EN PLUS du WebSocket (les deux
-  // ne se gênent pas).
   void _startPolling() {
     _pollTimer = Timer.periodic(
       const Duration(seconds: 4),
@@ -115,44 +111,54 @@ class ProviderController extends ChangeNotifier {
     await _loadInterventions();
     final newPendingIds = pendingRequests.map((r) => r.id).toSet();
 
-    // Ne déclencher l'alarme QUE pour une demande qui vient d'apparaître
-    // (pas à chaque sondage, sinon elle sonnerait toutes les 4s en boucle).
+    // Ne déclencher l'alarme QUE pour une demande qui vient d'apparaître.
     final freshlyArrived = newPendingIds.difference(previousPendingIds);
     if (freshlyArrived.isNotEmpty) {
       final id = freshlyArrived.first;
       final match = _myInterventions.where((i) => i.id == id);
       if (match.isNotEmpty) {
+        final intervention = match.first;
         debugPrint('[ProviderController] Nouvelle demande détectée par sondage: $id');
         ProviderAlertService.instance.newOrder(
-          dispatchId:  id,
-          serviceName: match.first.serviceTypeName,
+          dispatchId    : id,
+          clientName    : intervention.clientName,
+          serviceType   : intervention.serviceTypeName,
+          address       : intervention.address,
+          estimatedPrice: intervention.estimatedPrice?.toString(),
         );
       }
     }
   }
 
-  // BUG CORRIGÉ : aucun gestionnaire n'existait pour les notifications FCM
-  // reçues pendant que l'app est au premier plan (et _bgHandler dans
-  // main.dart ne fait rien). Android affiche la notification système, mais
-  // rien ne déclenchait l'alarme sonore/vocale interne (ProviderAlertService
-  // ne joue jamais de son via le canal de notification Android — c'est un
-  // lecteur audio + TTS entièrement côté Dart) ni ne rafraîchissait la
-  // liste des demandes en attente. Redondant avec le WebSocket par
-  // sécurité tant que sa fiabilité n'est pas confirmée.
+  // ── FCM — app au premier plan ─────────────────────────────────────────────
+  //
+  // FIX CRITIQUE : le serveur envoyait type='intervention' mais Flutter
+  // n'écoutait que type='dispatch_alert'. Le serveur envoie maintenant
+  // type='dispatch_alert' avec tous les champs voix (client_name,
+  // service_type, address, estimated_price) pour l'Option C.
   void _subscribeFcm() {
     _fcmSub = FirebaseMessaging.onMessage.listen((message) {
-      final type = message.data['type'];
+      final data = message.data;
+      final type = data['type'] as String?;
       if (type != 'dispatch_alert') return;
 
-      final interventionId = message.data['intervention_id'] as String?;
-      final serviceType    = message.data['service_type'] as String?;
+      final interventionId = data['intervention_id'] as String?;
       if (interventionId == null) return;
 
-      debugPrint('[ProviderController] FCM dispatch_alert reçu: $interventionId');
+      // ── Champs voix Option C ───────────────────────────────────────────
+      final clientName     = data['client_name']     as String?;
+      final serviceType    = data['service_type']    as String?;
+      final address        = data['address']         as String?;
+      final estimatedPrice = data['estimated_price'] as String?;
+
+      debugPrint('[ProviderController] FCM dispatch_alert reçu: $interventionId — $clientName / $serviceType');
 
       ProviderAlertService.instance.newOrder(
-        dispatchId:  interventionId,
-        serviceName: serviceType,
+        dispatchId    : interventionId,
+        clientName    : clientName,
+        serviceType   : serviceType,
+        address       : address,
+        estimatedPrice: estimatedPrice,
       );
 
       // Rafraîchir pour faire apparaître la nouvelle demande immédiatement.
@@ -183,8 +189,11 @@ class ProviderController extends ChangeNotifier {
       if (updated.dispatchedProviderId == _provider!.id && updated.isPending) {
         _pendingDispatch = updated;
         ProviderAlertService.instance.newOrder(
-          dispatchId:  updated.id,
-          serviceName: updated.serviceTypeName,
+          dispatchId    : updated.id,
+          clientName    : updated.clientName,
+          serviceType   : updated.serviceTypeName,
+          address       : updated.address,
+          estimatedPrice: updated.estimatedPrice?.toString(),
         );
         notifyListeners();
         return;
@@ -210,46 +219,23 @@ class ProviderController extends ChangeNotifier {
   // ── GPS continu ───────────────────────────────────────────────────────────
 
   void _startLocationUpdates() {
-    // BUG CORRIGÉ : le flux GPS (distanceFilter: 10) n'envoie une mise à
-    // jour qu'après 10 mètres de déplacement RÉEL — tant que le
-    // prestataire ne bouge pas (très courant juste après avoir accepté,
-    // ou en tests en intérieur), AUCUNE position n'était jamais envoyée,
-    // donc le client ne voyait même pas le point du prestataire sur sa
-    // carte (pas juste "il ne bouge pas" — littéralement absent). On
-    // envoie maintenant systématiquement une position immédiate au
-    // démarrage, puis le flux filtré prend le relais pour les
-    // déplacements réels.
     _sendImmediatePosition();
 
     _locationSub = _location.positionStream().listen(
       (pos) async {
         if (_provider == null) return;
-        // BUG CRITIQUE CORRIGÉ : ce listener se déclenche à chaque mise à
-        // jour GPS (potentiellement plusieurs fois par minute), en tâche de
-        // fond, sans lien avec une action de l'utilisateur. Sans try/catch,
-        // la moindre erreur serveur (même transitoire, ex: 500 ponctuel)
-        // plantait l'app à N'IMPORTE QUEL MOMENT, y compris en pleine
-        // intervention — le pire endroit possible pour un crash silencieux.
         try {
           await _api.updateGlobalLocation(pos.latitude, pos.longitude);
 
-          // Mettre aussi à jour la position dans l'intervention active
           final active = activeIntervention;
           if (active != null) {
             await _api.updateProviderLocation(active.id, pos.latitude, pos.longitude);
           }
         } catch (e) {
           debugPrint('[ProviderController] Erreur mise à jour position : $e');
-          // Volontairement silencieux : un ping GPS manqué n'est pas assez
-          // grave pour interrompre le prestataire ou afficher une erreur —
-          // le prochain ping (quelques secondes plus tard) réessaiera.
         }
       },
       onError: (e) {
-        // Le FLUX GPS natif lui-même peut émettre une erreur (permission
-        // révoquée en cours de route, service localisation coupé) — sans
-        // ce handler, ça échapperait au try/catch ci-dessus et planterait
-        // l'app pareil.
         debugPrint('[ProviderController] Erreur flux position : $e');
       },
     );
@@ -266,8 +252,6 @@ class ProviderController extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[ProviderController] Erreur position immédiate : $e');
-      // Silencieux : le flux GPS ci-dessous réessaiera dès le premier
-      // déplacement de toute façon.
     }
   }
 
@@ -300,20 +284,11 @@ class ProviderController extends ChangeNotifier {
       _isAvailable     = false;
       _isLoading       = false;
       notifyListeners();
-      // AJOUTÉ : au démarrage de l'app, aucune intervention n'est encore
-      // active, donc l'envoi de position immédiate ne renseignait que la
-      // position générale du prestataire, jamais provider_latitude sur
-      // CETTE intervention précise. Sans ça, le client ne voyait aucun
-      // point prestataire sur sa carte tant que celui-ci n'avait pas
-      // parcouru 10m après avoir accepté.
       _sendImmediatePosition();
       return true;
     } catch (e) {
       debugPrint('[ProviderController] acceptIntervention error: $e');
       FirebaseCrashlytics.instance.log('[ProviderController] acceptIntervention error: $e');
-      // BUG CORRIGÉ : ne définissait jamais _actionError, donc l'UI
-      // affichait un message resté d'une précédente action (ex: "Impossible
-      // de refuser cette demande" au clic sur "Accepter").
       _actionError = 'Impossible d\'accepter cette demande. Réessayez.';
       _isLoading = false;
       notifyListeners();
@@ -324,9 +299,6 @@ class ProviderController extends ChangeNotifier {
   String? _actionError;
   String? get actionError => _actionError;
 
-  /// AVANT : aucun try/catch ici. La moindre erreur reseau/backend lors du
-  /// clic sur "Demarrer" plantait l'app entiere (exception non rattrapee
-  /// remontant jusqu'au handler global -> crash -> retour splashscreen).
   Future<bool> startIntervention(String id) async {
     _actionError = null;
     try {
@@ -345,8 +317,6 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  /// Meme correctif : aucune protection avant, meme symptome que
-  /// startIntervention (crash au clic sur "Terminer").
   Future<bool> completeIntervention(String id, {required double finalAmount}) async {
     _actionError = null;
     try {
@@ -366,17 +336,10 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  /// Meme correctif que startIntervention/completeIntervention : aucune
-  /// protection avant, meme symptome (crash au clic sur "Refuser").
   Future<bool> declineIntervention(String id) async {
     _actionError = null;
     try {
       ProviderAlertService.instance.stop();
-      // BUG CORRIGÉ : appelait cancelIntervention() -> /user/interventions/
-      // {id}/cancel, l'endpoint CLIENT. Un token prestataire ne passe
-      // jamais ce contrôle (401 systématique), et comme l'app se
-      // déconnecte automatiquement sur toute erreur 401, refuser une
-      // demande plantait littéralement l'app et renvoyait au splashscreen.
       await _api.declineDispatchedIntervention(id).timeout(const Duration(seconds: 30));
       _pendingDispatch = null;
       notifyListeners();
@@ -404,7 +367,6 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  /// Renvoie null en cas de succès, sinon un message d'erreur à afficher.
   Future<String?> addAssistant({
     required String name,
     String? phone,
@@ -452,7 +414,6 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  /// Réaffecte l'intervenant d'une commande déjà acceptée (null = moi-même).
   Future<bool> assignAssistant(String interventionId, int? assistantId) async {
     _actionError = null;
     try {
