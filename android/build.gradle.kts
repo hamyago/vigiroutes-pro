@@ -15,6 +15,15 @@ val keyProperties = Properties().apply {
     }
 }
 
+// FIX build : kotlin { compilerOptions } doit être au niveau TOP-LEVEL du
+// script, pas imbriqué dans android {}. À l'intérieur de android {}, Gradle
+// ne reconnaît pas le bloc kotlin() et lève "Unresolved reference".
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+    }
+}
+
 android {
     namespace = "ci.oyopmt.vigiroutes.provider"
     compileSdk = flutter.compileSdkVersion
@@ -24,12 +33,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
         isCoreLibraryDesugaringEnabled = true
-    }
-
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
-        }
     }
 
     signingConfigs {
