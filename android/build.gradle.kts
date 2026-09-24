@@ -26,6 +26,10 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+
     signingConfigs {
         create("release") {
             keyAlias = keyProperties.getProperty("keyAlias")
@@ -50,13 +54,6 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
-    }
-}
-
-// Forcer JVM 21 pour toutes les tâches de compilation Kotlin
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    kotlinOptions {
-        jvmTarget = "21"
     }
 }
 
