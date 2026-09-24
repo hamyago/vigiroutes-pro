@@ -16,16 +16,23 @@ class ProviderController extends ChangeNotifier {
 
   ProviderModel?          _provider;
   List<InterventionModel> _myInterventions  = [];
-  InterventionModel?      _pendingDispatch;   // alerte dispatch entrante
-  List<ProviderAssistant> _assistants       = []; // équipe du prestataire
+  InterventionModel?      _pendingDispatch;
+  List<ProviderAssistant> _assistants       = [];
   bool                    _isAvailable = true;
   bool                    _isLoading   = false;
   bool                    _initialized = false;
+  String?                 _actionError;
 
-  StreamSubscription<Position>? _locationSub;
-  StreamSubscription?           _wsSub;
+  // ── Timeout dispatch ──────────────────────────────────────────────────────
+  // Pour chaque intervention en attente, on garde un timer de 30s.
+  // Si le prestataire ne répond pas, on appelle /decline côté API
+  // (le serveur repassera au prestataire suivant dans la liste).
+  final Map<String, Timer> _dispatchTimers = {};
+
+  StreamSubscription<Position>?      _locationSub;
+  StreamSubscription?                _wsSub;
   StreamSubscription<RemoteMessage>? _fcmSub;
-  Timer?                        _pollTimer;
+  Timer?                             _pollTimer;
 
   ProviderModel?          get provider          => _provider;
   List<InterventionModel> get myInterventions   => _myInterventions;
@@ -35,10 +42,12 @@ class ProviderController extends ChangeNotifier {
       _assistants.where((a) => a.isActive).length < 3;
   bool                    get isAvailable       => _isAvailable;
   bool                    get isLoading         => _isLoading;
+  String?                 get actionError       => _actionError;
 
-  // Interventions actives (acceptées/en cours) — n'inclut PAS les pending dispatch
   List<InterventionModel> get pendingRequests =>
-      _myInterventions.where((i) => i.isPending && i.dispatchedProviderId == _provider?.id).toList();
+      _myInterventions
+          .where((i) => i.isPending && i.dispatchedProviderId == _provider?.id)
+          .toList();
 
   InterventionModel? get activeIntervention =>
       _myInterventions.where((i) => i.isAccepted || i.isInProgress).firstOrNull;
@@ -78,27 +87,18 @@ class ProviderController extends ChangeNotifier {
     _startPolling();
   }
 
-  /// Charge les interventions à l'ouverture et, si une demande est déjà en
-  /// attente (typiquement un push de dispatch tapé alors que l'app était en
-  /// arrière-plan — cas où onMessage ne se déclenche pas), lève l'alarme
-  /// sonore pour que le prestataire ne rate pas la demande.
   Future<void> _bootstrapDispatch() async {
     await _loadInterventions();
     final pending = pendingRequests;
     if (pending.isNotEmpty) {
       final first = pending.first;
-      ProviderAlertService.instance.newOrder(
-        dispatchId    : first.id,
-        clientName    : first.clientName,
-        serviceType   : first.serviceTypeName,
-        address       : first.address,
-        estimatedPrice: first.estimatedPrice?.toString(),
-      );
+      _triggerDispatchAlert(first);
       notifyListeners();
     }
   }
 
-  // ── Rafraîchissement automatique par sondage (secours) ──────────────────
+  // ── Polling de secours (4s) ───────────────────────────────────────────────
+
   void _startPolling() {
     _pollTimer = Timer.periodic(
       const Duration(seconds: 4),
@@ -111,48 +111,40 @@ class ProviderController extends ChangeNotifier {
     await _loadInterventions();
     final newPendingIds = pendingRequests.map((r) => r.id).toSet();
 
-    // Ne déclencher l'alarme QUE pour une demande qui vient d'apparaître.
     final freshlyArrived = newPendingIds.difference(previousPendingIds);
-    if (freshlyArrived.isNotEmpty) {
-      final id = freshlyArrived.first;
+    for (final id in freshlyArrived) {
       final match = _myInterventions.where((i) => i.id == id);
       if (match.isNotEmpty) {
-        final intervention = match.first;
         debugPrint('[ProviderController] Nouvelle demande détectée par sondage: $id');
-        ProviderAlertService.instance.newOrder(
-          dispatchId    : id,
-          clientName    : intervention.clientName,
-          serviceType   : intervention.serviceTypeName,
-          address       : intervention.address,
-          estimatedPrice: intervention.estimatedPrice?.toString(),
-        );
+        _triggerDispatchAlert(match.first);
       }
     }
   }
 
-  // ── FCM — app au premier plan ─────────────────────────────────────────────
-  //
-  // FIX CRITIQUE : le serveur envoyait type='intervention' mais Flutter
-  // n'écoutait que type='dispatch_alert'. Le serveur envoie maintenant
-  // type='dispatch_alert' avec tous les champs voix (client_name,
-  // service_type, address, estimated_price) pour l'Option C.
+  // ── FCM foreground ────────────────────────────────────────────────────────
+
   void _subscribeFcm() {
     _fcmSub = FirebaseMessaging.onMessage.listen((message) {
       final data = message.data;
       final type = data['type'] as String?;
-      if (type != 'dispatch_alert') return;
+
+      // Accepter 'dispatch_alert' ET 'new_order' (deux noms possibles selon
+      // la version du serveur) ainsi que les notifications sans data.type
+      // mais avec un intervention_id — pour couvrir FCM V1 legacy.
+      if (type != 'dispatch_alert' && type != 'new_order') return;
 
       final interventionId = data['intervention_id'] as String?;
       if (interventionId == null) return;
 
-      // ── Champs voix Option C ───────────────────────────────────────────
       final clientName     = data['client_name']     as String?;
       final serviceType    = data['service_type']    as String?;
       final address        = data['address']         as String?;
       final estimatedPrice = data['estimated_price'] as String?;
 
-      debugPrint('[ProviderController] FCM dispatch_alert reçu: $interventionId — $clientName / $serviceType');
+      debugPrint('[ProviderController] FCM dispatch reçu: $interventionId');
 
+      // Construire un InterventionModel minimal pour le timer de timeout
+      // en attendant le rechargement complet.
       ProviderAlertService.instance.newOrder(
         dispatchId    : interventionId,
         clientName    : clientName,
@@ -161,10 +153,69 @@ class ProviderController extends ChangeNotifier {
         estimatedPrice: estimatedPrice,
       );
 
-      // Rafraîchir pour faire apparaître la nouvelle demande immédiatement.
+      // Démarrer le timer de 30s pour ce dispatch
+      _startDispatchTimer(interventionId);
+
+      // Rafraîchir pour faire apparaître la demande immédiatement.
       _loadInterventions();
     });
   }
+
+  // ── Alerte + timer de timeout 30s ────────────────────────────────────────
+
+  void _triggerDispatchAlert(InterventionModel intervention) {
+    ProviderAlertService.instance.newOrder(
+      dispatchId    : intervention.id,
+      clientName    : intervention.clientName,
+      serviceType   : intervention.serviceTypeName,
+      address       : intervention.address,
+      estimatedPrice: intervention.estimatedPrice?.toString(),
+    );
+    _startDispatchTimer(intervention.id);
+  }
+
+  /// Lance un timer de 30s pour le dispatch [interventionId].
+  /// Si le prestataire n'accepte/refuse pas dans ce délai, on decline
+  /// automatiquement (le serveur passera au prestataire suivant).
+  void _startDispatchTimer(String interventionId) {
+    // Annuler un éventuel timer précédent pour la même intervention.
+    _dispatchTimers[interventionId]?.cancel();
+
+    _dispatchTimers[interventionId] = Timer(
+      const Duration(seconds: 30),
+      () => _autoDeclineOnTimeout(interventionId),
+    );
+  }
+
+  Future<void> _autoDeclineOnTimeout(String interventionId) async {
+    debugPrint('[ProviderController] Timeout 30s — auto-decline $interventionId');
+    _dispatchTimers.remove(interventionId);
+
+    // Vérifier que l'intervention est toujours en attente (pas déjà traitée).
+    final stillPending = pendingRequests.any((r) => r.id == interventionId);
+    if (!stillPending) return;
+
+    try {
+      await _api.declineDispatchedIntervention(interventionId);
+      // Supprimer localement pour ne pas laisser la demande affichée.
+      _myInterventions.removeWhere((i) => i.id == interventionId);
+      if (_pendingDispatch?.id == interventionId) _pendingDispatch = null;
+      ProviderAlertService.instance.stop();
+      notifyListeners();
+      debugPrint('[ProviderController] Auto-decline OK pour $interventionId');
+    } catch (e) {
+      debugPrint('[ProviderController] Erreur auto-decline: $e');
+      FirebaseCrashlytics.instance.log(
+          '[ProviderController] auto-decline ERREUR $interventionId: $e');
+    }
+  }
+
+  void _cancelDispatchTimer(String interventionId) {
+    _dispatchTimers[interventionId]?.cancel();
+    _dispatchTimers.remove(interventionId);
+  }
+
+  // ── Chargement des interventions ──────────────────────────────────────────
 
   Future<void> _loadInterventions() async {
     try {
@@ -178,28 +229,20 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  // ── WebSocket — remplace les streams Firestore ────────────────────────────
+  // ── WebSocket ─────────────────────────────────────────────────────────────
 
   void _subscribeWebSocket() {
     if (_provider == null) return;
     _wsSub = _realtime.subscribeToDispatch(_provider!.id).listen((data) {
       final updated = InterventionModel.fromJson(data);
 
-      // Nouvelle demande de dispatch → afficher l'alerte + sonnerie
       if (updated.dispatchedProviderId == _provider!.id && updated.isPending) {
         _pendingDispatch = updated;
-        ProviderAlertService.instance.newOrder(
-          dispatchId    : updated.id,
-          clientName    : updated.clientName,
-          serviceType   : updated.serviceTypeName,
-          address       : updated.address,
-          estimatedPrice: updated.estimatedPrice?.toString(),
-        );
+        _triggerDispatchAlert(updated);
         notifyListeners();
         return;
       }
 
-      // Mise à jour d'une intervention existante
       final idx = _myInterventions.indexWhere((i) => i.id == updated.id);
       if (idx >= 0) {
         _myInterventions[idx] = updated;
@@ -207,9 +250,9 @@ class ProviderController extends ChangeNotifier {
         _myInterventions.insert(0, updated);
       }
 
-      // Effacer l'alerte si résolue
       if (_pendingDispatch?.id == updated.id && !updated.isPending) {
         _pendingDispatch = null;
+        _cancelDispatchTimer(updated.id);
         ProviderAlertService.instance.stop();
       }
       notifyListeners();
@@ -220,13 +263,11 @@ class ProviderController extends ChangeNotifier {
 
   void _startLocationUpdates() {
     _sendImmediatePosition();
-
     _locationSub = _location.positionStream().listen(
       (pos) async {
         if (_provider == null) return;
         try {
           await _api.updateGlobalLocation(pos.latitude, pos.longitude);
-
           final active = activeIntervention;
           if (active != null) {
             await _api.updateProviderLocation(active.id, pos.latitude, pos.longitude);
@@ -235,9 +276,7 @@ class ProviderController extends ChangeNotifier {
           debugPrint('[ProviderController] Erreur mise à jour position : $e');
         }
       },
-      onError: (e) {
-        debugPrint('[ProviderController] Erreur flux position : $e');
-      },
+      onError: (e) => debugPrint('[ProviderController] Erreur flux position : $e'),
     );
   }
 
@@ -264,14 +303,16 @@ class ProviderController extends ChangeNotifier {
     try {
       await _api.updateAvailability(_isAvailable);
     } catch (_) {
-      _isAvailable = !_isAvailable; // rollback
+      _isAvailable = !_isAvailable;
       notifyListeners();
     }
   }
 
   Future<bool> acceptIntervention(String id, {int? assignedAssistantId}) async {
-    _isLoading = true;
+    _isLoading   = true;
     _actionError = null;
+    // Annuler le timer de timeout — le prestataire a répondu.
+    _cancelDispatchTimer(id);
     ProviderAlertService.instance.stop();
     notifyListeners();
     try {
@@ -290,21 +331,16 @@ class ProviderController extends ChangeNotifier {
       debugPrint('[ProviderController] acceptIntervention error: $e');
       FirebaseCrashlytics.instance.log('[ProviderController] acceptIntervention error: $e');
       _actionError = 'Impossible d\'accepter cette demande. Réessayez.';
-      _isLoading = false;
+      _isLoading   = false;
       notifyListeners();
       return false;
     }
   }
 
-  String? _actionError;
-  String? get actionError => _actionError;
-
   Future<bool> startIntervention(String id) async {
     _actionError = null;
     try {
-      final data = await _api
-          .startIntervention(id)
-          .timeout(const Duration(seconds: 30));
+      final data = await _api.startIntervention(id).timeout(const Duration(seconds: 30));
       _upsert(InterventionModel.fromJson(data));
       notifyListeners();
       return true;
@@ -338,9 +374,12 @@ class ProviderController extends ChangeNotifier {
 
   Future<bool> declineIntervention(String id) async {
     _actionError = null;
+    // Annuler le timer — le prestataire a répondu (refus explicite).
+    _cancelDispatchTimer(id);
     try {
       ProviderAlertService.instance.stop();
       await _api.declineDispatchedIntervention(id).timeout(const Duration(seconds: 30));
+      _myInterventions.removeWhere((i) => i.id == id);
       _pendingDispatch = null;
       notifyListeners();
       return true;
@@ -353,7 +392,7 @@ class ProviderController extends ChangeNotifier {
     }
   }
 
-  // ── Équipe / intervenants ────────────────────────────────────────────────
+  // ── Équipe ────────────────────────────────────────────────────────────────
 
   Future<void> loadAssistants() async {
     try {
@@ -439,6 +478,10 @@ class ProviderController extends ChangeNotifier {
 
   @override
   void dispose() {
+    for (final t in _dispatchTimers.values) {
+      t.cancel();
+    }
+    _dispatchTimers.clear();
     _wsSub?.cancel();
     _locationSub?.cancel();
     _fcmSub?.cancel();

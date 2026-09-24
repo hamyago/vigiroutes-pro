@@ -39,25 +39,16 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
         final onAuth    = loc.startsWith('/auth');
         final onProvider = loc.startsWith('/provider');
 
-        // Ne jamais rediriger depuis le splash ou les routes auth
         if (onSplash) return null;
         if (onAuth)   return null;
-
-        // Tant que l'état est inconnu, on attend
         if (isLoading) return null;
 
-        // Si authentifié et sur une route provider → laisser passer sans rediriger
+        // FIX : ne jamais rediriger un prestataire authentifié depuis /provider/*
+        // Évite la déconnexion apparente au bouton retour Android.
         if (isAuth && onProvider) return null;
 
-        // Si non authentifié et pas sur onboarding → renvoyer vers onboarding
-        if (!isAuth && loc != '/onboarding') {
-          return '/onboarding';
-        }
-
-        // Si authentifié et sur onboarding → accueil provider
-        if (isAuth && loc == '/onboarding') {
-          return '/provider/home';
-        }
+        if (!isAuth && loc != '/onboarding') return '/onboarding';
+        if (isAuth && loc == '/onboarding')  return '/provider/home';
 
         return null;
       },
@@ -90,14 +81,10 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
           ],
         ),
 
-        // ── Navigation dépannage standard ──────────────────────────
         GoRoute(path: '/provider/navigation/:id', builder: (ctx, s) =>
             ProviderNavigationScreen(
                 interventionId: s.pathParameters['id']!)),
 
-        // ── Mission CT (remorquage vers centre contrôle technique) ──
-        // Ouvrir depuis provider_home_screen quand isCTTransport == true
-        // à la place de /provider/navigation/:id
         GoRoute(path: '/provider/ct-transport/:id', builder: (ctx, s) =>
             CTTransportScreen(
                 interventionId: s.pathParameters['id']!)),
@@ -122,21 +109,17 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
         GoRoute(path: '/provider/subscription', builder: (ctx, s) =>
             const ProviderSubscriptionScreen()),
 
-        // ── Infos prestataire + historique souscriptions ─────────
         GoRoute(path: '/provider/info', builder: (ctx, s) =>
             const ProviderInfoScreen()),
         GoRoute(path: '/provider/subscription/history', builder: (ctx, s) =>
             const ProviderSubscriptionHistoryScreen()),
 
-        // ── Tarifs prestataire ────────────────────────────────────
         GoRoute(path: '/provider/rates', builder: (ctx, s) =>
             const ProviderRatesScreen()),
 
-        // ── Mon équipe (assistants) ───────────────────────────────
         GoRoute(path: '/provider/team', builder: (ctx, s) =>
             const TeamScreen()),
 
-        // ── Missions CT (opérateur de centre de contrôle technique) ──
         GoRoute(path: '/provider/ct', builder: (_, __) =>
             const CtMissionsScreen()),
         GoRoute(path: '/provider/ct/:id', builder: (ctx, s) =>
