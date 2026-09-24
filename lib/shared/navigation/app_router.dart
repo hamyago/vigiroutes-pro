@@ -43,7 +43,7 @@ GoRouter buildProviderRouter(AuthController auth) => GoRouter(
         if (onAuth)   return null;
         if (isLoading) return null;
 
-        // FIX : ne jamais rediriger un prestataire authentifié depuis /provider/*
+        // FIX bug 1 : ne jamais rediriger un prestataire authentifié depuis /provider/*
         // Évite la déconnexion apparente au bouton retour Android.
         if (isAuth && onProvider) return null;
 
@@ -150,5 +150,22 @@ class _ProviderShellState extends State<_ProviderShell> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    // FIX bug 1 : intercepter le bouton retour Android à l'intérieur de la ShellRoute.
+    // Sans ce PopScope, GoRouter remonte la pile de navigation jusqu'à la racine '/'
+    // ce qui déclenche la redirection vers '/onboarding' et donne l'impression
+    // d'être déconnecté. On redirige à la place vers /provider/home.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        final loc = GoRouterState.of(context).matchedLocation;
+        // Si déjà sur home, on ne fait rien (ne quitte pas l'app non plus)
+        if (loc == '/provider/home') return;
+        // Sur toute autre page de la shell, retour vers home
+        context.go('/provider/home');
+      },
+      child: widget.child,
+    );
+  }
 }

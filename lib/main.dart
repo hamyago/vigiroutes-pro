@@ -43,9 +43,16 @@ Future<void> _bgHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 
   final data = message.data;
-  if (data['type'] != 'dispatch_alert') return;
+  final type = data['type'] as String?;
 
-  // Initialisation minimale de flutter_local_notifications dans cet isolate.
+  // FIX bug 2 : gérer dispatch_alert ET new_order (les deux types envoyés
+  // par le backend pour alerter d'une nouvelle course).
+  if (type != 'dispatch_alert' && type != 'new_order') return;
+
+  // FIX bug 2 : initialiser flutter_local_notifications dans cet isolate
+  // ET créer explicitement le canal avant d'appeler show().
+  // Sans cette création, la notification tombe dans le canal "default"
+  // (importance normale, pas de son d'alarme).
   final plugin = FlutterLocalNotificationsPlugin();
   await plugin.initialize(
     const InitializationSettings(
@@ -53,6 +60,12 @@ Future<void> _bgHandler(RemoteMessage message) async {
       iOS    : DarwinInitializationSettings(),
     ),
   );
+
+  // Créer le canal haute priorité dans l'isolate background
+  await plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_dispatchChannel);
 
   final clientName  = data['client_name']     as String? ?? 'Client';
   final serviceType = data['service_type']    as String? ?? '';
@@ -129,9 +142,26 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_bgHandler);
 
   // ── Permissions FCM ────────────────────────────────────────────────────
-  await FirebaseMessaging.instance.requestPermission(
+  // FIX bug 2 : requestPermission() peut bloquer indéfiniment sur iOS si
+  // Firebase n'est pas encore prêt. On l'enveloppe dans un timeout non-bloquant.
+  FirebaseMessaging.instance.requestPermission(
     alert: true, sound: true, badge: true,
-  );
+  ).timeout(const Duration(seconds: 10), onTimeout: () {
+    debugPrint('[FCM] requestPermission timeout — continuing anyway');
+    return const NotificationSettings(
+      authorizationStatus: AuthorizationStatus.notDetermined,
+      alert: AppleNotificationSetting.notSupported,
+      announcement: AppleNotificationSetting.notSupported,
+      badge: AppleNotificationSetting.notSupported,
+      carPlay: AppleNotificationSetting.notSupported,
+      criticalAlert: AppleNotificationSetting.notSupported,
+      lockScreen: AppleNotificationSetting.notSupported,
+      notificationCenter: AppleNotificationSetting.notSupported,
+      showPreviews: AppleShowPreviewSetting.never,
+      timeSensitive: AppleNotificationSetting.notSupported,
+      sound: AppleNotificationSetting.notSupported,
+    );
+  }).ignore();
 
   // ── flutter_local_notifications — canal Android haute priorité ────────
   await _localNotifications.initialize(
