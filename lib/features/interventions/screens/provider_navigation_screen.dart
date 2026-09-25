@@ -117,7 +117,9 @@ class _ProviderNavigationScreenState
   @override
   Widget build(BuildContext context) {
     final i    = _intervention;
-    final ctrl = context.read<ProviderController>();
+    // watch() permet à l'écran de se reconstruire quand le controller
+    // notifie (ex: startIntervention met à jour _myInterventions).
+    final ctrl = context.watch<ProviderController>();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -306,7 +308,13 @@ class _ProviderNavigationScreenState
                             onPressed: () async {
                               final ok =
                                   await ctrl.startIntervention(i.id);
-                              if (!ok && context.mounted) {
+                              if (!context.mounted) return;
+                              if (ok) {
+                                // Recharger l'intervention locale pour
+                                // passer en mode isInProgress sans quitter
+                                // l'écran.
+                                await _loadIntervention();
+                              } else {
                                 ScaffoldMessenger.of(context)
                                     .showSnackBar(SnackBar(
                                         content: Text(ctrl.actionError ??
