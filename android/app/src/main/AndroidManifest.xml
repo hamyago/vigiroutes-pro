@@ -63,6 +63,30 @@
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
 
+        <!-- Canal FCM par défaut : les data-only messages envoyés par le
+             backend sans la clé "notification" utilisent ce canal.
+             Doit correspondre à l'id déclaré dans main.dart (_dispatchChannel). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="dispatch_alerts" />
+
+        <!-- Priorité maximale pour les data messages en background/killed.
+             Sans cette déclaration, FCM peut différer la livraison sur
+             Android 13+ (Doze mode / battery optimization). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
+        <!-- Service FCM explicite requis pour les data-only messages
+             en background sur Android 8+ (API 26+). -->
+        <service
+            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:exported="false">
+            <intent-filter android:priority="-500">
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
     </application>
 
     <queries>

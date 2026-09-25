@@ -298,57 +298,96 @@ class _ProviderNavigationScreenState
 
                   // ── Actions selon le statut ────────────────────────────
                   if (i.isAccepted)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          final ok =
-                              await ctrl.startIntervention(i.id);
-                          if (!ok && context.mounted) {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(SnackBar(
-                                    content: Text(ctrl.actionError ??
-                                        'Erreur lors du démarrage.')));
-                          }
-                        },
-                        icon: const Icon(Icons.build, size: 18),
-                        label: const Text('Démarrer l\'intervention'),
-                        style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(0, 48)),
-                      ),
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final ok =
+                                  await ctrl.startIntervention(i.id);
+                              if (!ok && context.mounted) {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(SnackBar(
+                                        content: Text(ctrl.actionError ??
+                                            'Erreur lors du démarrage.')));
+                              }
+                            },
+                            icon: const Icon(Icons.build, size: 18),
+                            label: const Text('Démarrer l\'intervention'),
+                            style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(0, 48)),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _confirmCancel(context, ctrl, i.id),
+                            icon: const Icon(Icons.cancel_outlined,
+                                size: 18, color: AppColors.error),
+                            label: const Text('Annuler la commande',
+                                style: TextStyle(color: AppColors.error)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppColors.error),
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
                   if (i.isInProgress)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          final finalAmount = await _askFinalAmount(
-                              context, i.totalPrice);
-                          if (finalAmount == null) return;
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final finalAmount = await _askFinalAmount(
+                                  context, i.totalPrice);
+                              if (finalAmount == null) return;
 
-                          final success =
-                              await ctrl.completeIntervention(
-                                  i.id,
-                                  finalAmount: finalAmount);
-                          if (!context.mounted) return;
-                          if (success) {
-                            // Aller directement à l'écran de notation
-                            context.go('/provider/review/${i.id}');
-                          } else {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(SnackBar(
-                                    content: Text(ctrl.actionError ??
-                                        'Erreur lors de la finalisation.')));
-                          }
-                        },
-                        icon: const Icon(Icons.check_circle, size: 18),
-                        label: const Text('Terminer l\'intervention'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          minimumSize: const Size(0, 48),
+                              final success =
+                                  await ctrl.completeIntervention(
+                                      i.id,
+                                      finalAmount: finalAmount);
+                              if (!context.mounted) return;
+                              if (success) {
+                                context.go('/provider/review/${i.id}');
+                              } else {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(SnackBar(
+                                        content: Text(ctrl.actionError ??
+                                            'Erreur lors de la finalisation.')));
+                              }
+                            },
+                            icon: const Icon(Icons.check_circle, size: 18),
+                            label: const Text('Terminer l\'intervention'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.success,
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _confirmCancel(context, ctrl, i.id),
+                            icon: const Icon(Icons.cancel_outlined,
+                                size: 18, color: AppColors.error),
+                            label: const Text('Annuler la commande',
+                                style: TextStyle(color: AppColors.error)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppColors.error),
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
                   if (i.isCompleted)
@@ -477,6 +516,48 @@ class _StatusChip extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 fontSize: 13)),
       ]),
+    );
+  }
+}
+
+/// Demande confirmation avant d'annuler une intervention acceptée/en cours.
+Future<void> _confirmCancel(
+    BuildContext context, ProviderController ctrl, String id) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Annuler la commande ?'),
+      content: const Text(
+        'Le client sera notifié de l\'annulation.\n\n'
+        'Cette action ne peut pas être annulée. '
+        'Des annulations répétées peuvent affecter votre note.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Retour'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error),
+          child: const Text('Confirmer l\'annulation',
+              style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true || !context.mounted) return;
+  final ok = await ctrl.cancelIntervention(id);
+  if (!context.mounted) return;
+  if (ok) {
+    context.go('/provider/home');
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text(
+              ctrl.actionError ?? 'Impossible d\'annuler. Réessayez.')),
     );
   }
 }
