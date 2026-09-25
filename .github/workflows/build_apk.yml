@@ -53,27 +53,20 @@ jobs:
           echo "=== key.properties ===" && cat android/key.properties
           echo "=== keystore ===" && ls -lh android/app/vigiroutes-release.jks
 
-      - name: Build APK Release (Gradle direct)
+      - name: Build APK Release
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease \
-            -PMAPS_API_KEY="${MAPS_API_KEY}" \
-            --no-daemon \
-            --stacktrace \
-            2>&1
+          GRADLE_OPTS: "-Xmx4g -Xms512m -XX:+HeapDumpOnOutOfMemoryError"
+          JAVA_TOOL_OPTIONS: "-Xmx4g"
+        run: flutter build apk --release --verbose 2>&1 | tail -200
 
       - name: Chercher l'APK produit
         if: always()
-        run: |
-          echo "=== Recherche APK ==="
-          find . -name "*.apk" 2>/dev/null || echo "Aucun APK trouvé"
+        run: find /home/runner/work -name "*.apk" 2>/dev/null || echo "Aucun APK trouvé"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: vigiroutes-pro-${{ github.run_number }}
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
