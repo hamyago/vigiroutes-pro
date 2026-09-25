@@ -130,16 +130,36 @@ class ApiService {
     double? latitude,
     double? longitude,
   }) async {
-    final res = await post('/auth/provider/complete-profile', data: {
-      'phone':         phone,
-      'name':          name,
-      'sector':        sector,
-      'service_types': serviceTypes,
-      if (fcmToken  != null) 'fcm_token': fcmToken,
-      if (latitude  != null) 'latitude':  latitude,
-      if (longitude != null) 'longitude': longitude,
-    });
+    // validateStatus élargi : on laisse passer 4xx pour que le contrôleur
+    // puisse lire response.data['message'] et afficher l'erreur backend réelle.
+    final res = await _dio.post(
+      '/auth/provider/complete-profile',
+      data: {
+        'phone':         phone,
+        'name':          name,
+        'sector':        sector,
+        'service_types': serviceTypes,
+        if (fcmToken  != null) 'fcm_token': fcmToken,
+        if (latitude  != null) 'latitude':  latitude,
+        if (longitude != null) 'longitude': longitude,
+      },
+      options: Options(
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+
     final data = (res.data as Map).cast<String, dynamic>();
+
+    // Si le backend a retourné une erreur 4xx, on la transforme en exception
+    // avec les données de la réponse attachées, pour que _extractError() fonctionne.
+    if ((res.statusCode ?? 0) >= 400) {
+      throw DioException(
+        requestOptions: res.requestOptions,
+        response: res,
+        type: DioExceptionType.badResponse,
+      );
+    }
+
     final token = data['token'] as String?;
     if (token != null) await saveToken(token);
     return data;
@@ -196,10 +216,25 @@ class ApiService {
   }
 
   // ── CORRECTION : route provider pour annuler une intervention acceptée ──
-  // Avant : appelait /user/interventions/$id/cancel (route user!)
-  // Correction : /provider/interventions/$id/cancel (route prestataire)
-  Future<void> cancelAcceptedIntervention(String id, {String? reason}) =>
-      post('/provider/interventions/$id/cancel', data: {'reason': reason});
+  // validateStatus élargi pour capturer l'erreur backend réelle (404 = route
+  // absente côté Laravel, 403 = statut non annulable, 422 = validation).
+  Future<void> cancelAcceptedIntervention(String id, {String? reason}) async {
+    final res = await _dio.post(
+      '/provider/interventions/$id/cancel',
+      data: {'reason': reason},
+      options: Options(
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+    debugPrint('[API] cancelAcceptedIntervention → ${res.statusCode} : ${res.data}');
+    if ((res.statusCode ?? 0) >= 400) {
+      throw DioException(
+        requestOptions: res.requestOptions,
+        response: res,
+        type: DioExceptionType.badResponse,
+      );
+    }
+  }
 
   // Annulation côté user (gardée pour usage éventuel côté client)
   Future<void> cancelUserIntervention(String id, {String? reason}) =>

@@ -82,9 +82,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
     }
 
+    // Le numéro DOIT être celui qui a reçu l'OTP pour que le backend retrouve
+    // l'enregistrement en attente. Le champ WhatsApp est secondaire (optionnel).
+    final otpPhone  = auth.otpPhone ?? '';
+    final whatsApp  = _phoneCtrl.text.trim();
+    // On prioritise le numéro OTP ; le numéro WhatsApp est ignoré s'il est vide.
+    final phoneToSend = otpPhone.isNotEmpty ? otpPhone : whatsApp;
+
+    if (phoneToSend.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Numéro introuvable. Veuillez recommencer depuis le début.'),
+          backgroundColor: Color(0xFFE53935),
+        ),
+      );
+      return;
+    }
+
     await auth.completeProviderProfile(
       name:         _nameCtrl.text.trim(),
-      phone:        _phoneCtrl.text.trim(),
+      phone:        phoneToSend,
       sector:       _selectedSector!,
       serviceTypes: [_serviceBySector[_selectedSector!]!],
       latitude:     _lat!,

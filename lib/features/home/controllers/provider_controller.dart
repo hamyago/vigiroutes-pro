@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -48,9 +49,13 @@ class ProviderController extends ChangeNotifier {
   bool    get isLoading   => _isLoading;
   String? get actionError => _actionError;
 
+  // BUG CORRIGÉ : le filtre "dispatchedProviderId == _provider?.id" rejetait
+  // toutes les demandes si _provider n'était pas encore initialisé (app
+  // revenue du background). Le backend filtre déjà via le token Sanctum —
+  // on ne retient ici que le statut.
   List<InterventionModel> get pendingRequests =>
       _myInterventions
-          .where((i) => i.isPending && i.dispatchedProviderId == _provider?.id)
+          .where((i) => i.isPending)
           .toList();
 
   InterventionModel? get activeIntervention =>
@@ -443,8 +448,7 @@ class ProviderController extends ChangeNotifier {
   }
 
   /// Annule une intervention déjà acceptée.
-  /// CORRECTION : utilise désormais la route provider (cancelAcceptedIntervention)
-  /// au lieu de la route user (cancelUserIntervention).
+  /// CORRECTION : utilise la route provider /provider/interventions/$id/cancel.
   Future<bool> cancelIntervention(String id) async {
     _actionError = null;
     try {
@@ -456,12 +460,28 @@ class ProviderController extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint(
-          '[ProviderController] cancelIntervention error: $e');
+      debugPrint('[ProviderController] cancelIntervention error: $e');
       FirebaseCrashlytics.instance
           .log('[ProviderController] cancelIntervention error: $e');
-      _actionError =
-          'Impossible d\'annuler cette intervention. Réessayez.';
+
+      // Extraire le message backend réel (DioException avec response)
+      String msg = 'Impossible d\'annuler cette intervention. Réessayez.';
+      if (e is DioException) {
+        final data = e.response?.data;
+        debugPrint('[ProviderController] cancel response body: $data');
+        if (data is Map) {
+          final backendMsg = data['message'] ?? data['error'];
+          if (backendMsg != null && backendMsg.toString().trim().isNotEmpty) {
+            msg = backendMsg.toString();
+          }
+        }
+        // 404 = route absente côté backend
+        if (e.response?.statusCode == 404) {
+          msg = 'Route d\'annulation introuvable (404). Vérifier le backend.';
+        }
+      }
+
+      _actionError = msg;
       notifyListeners();
       return false;
     }

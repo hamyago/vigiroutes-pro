@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +29,9 @@ class AuthController extends ChangeNotifier {
   bool           get isUser     => false;
   String?        get role       => _provider != null ? 'provider' : null;
   bool           get otpSent    => _otpSent;
+
+  /// Numéro qui a reçu l'OTP — nécessaire pour la complétion du profil.
+  String?        get otpPhone   => _otpPhone;
 
   AuthController() {
     _init();
@@ -76,12 +80,19 @@ class AuthController extends ChangeNotifier {
   Future<void> resendOtp(String phone) => sendOtp(phone);
 
   /// Vérifie l'OTP saisi et connecte/crée le prestataire.
-  Future<bool> verifyOtp(String otp) async {
-    if (_otpPhone == null) {
+  ///
+  /// [phone] peut être passé explicitement par l'écran OTP pour éviter la
+  /// perte de [_otpPhone] après un logout/reset d'état.
+  Future<bool> verifyOtp(String otp, {String? phone}) async {
+    // Priorité au paramètre explicite, puis à la valeur mémorisée.
+    final targetPhone = phone ?? _otpPhone;
+    if (targetPhone == null || targetPhone.isEmpty) {
       _error = 'Session expirée. Veuillez renvoyer le code.';
       notifyListeners();
       return false;
     }
+    // Resynchronise _otpPhone si besoin (ex : retour après logout partiel).
+    _otpPhone = targetPhone;
     _isLoading = true;
     _error     = null;
     notifyListeners();
@@ -98,7 +109,7 @@ class AuthController extends ChangeNotifier {
       }
 
       final response = await _api.verifyOtpProvider(
-        phone:    _otpPhone!,
+        phone:    targetPhone,
         otp:      otp,
         fcmToken: fcmToken,
       );
@@ -206,7 +217,10 @@ class AuthController extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('[ProviderAuth] completeProviderProfile: $e');
-      _error = 'Impossible d\'enregistrer votre profil. Vérifiez votre connexion et réessayez.';
+      _error = _extractError(
+        e,
+        'Impossible d\'enregistrer votre profil. Vérifiez votre connexion et réessayez.',
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -260,15 +274,20 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Extrait un message d'erreur lisible depuis une exception Dio ou autre.
+  /// Extrait un message d'erreur lisible depuis une DioException ou autre.
+  ///
+  /// Dio 5.x : l'exception est directement de type [DioException], plus besoin
+  /// du check sur toString(). On lit response.data['message'] en priorité, puis
+  /// response.data['error'], puis le fallback.
   String _extractError(dynamic e, String fallback) {
     try {
-      if (e is Exception && e.toString().contains('DioException')) {
-        final dynamic resp = (e as dynamic).response;
-        if (resp != null) {
-          final data = resp.data;
-          if (data is Map && data['message'] != null) {
-            return data['message'] as String;
+      // Dio 5.x — DioException est exporté directement par le package.
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map) {
+          final msg = data['message'] ?? data['error'];
+          if (msg != null && msg.toString().trim().isNotEmpty) {
+            return msg.toString();
           }
         }
       }

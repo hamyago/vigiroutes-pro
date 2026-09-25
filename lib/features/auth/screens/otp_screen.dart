@@ -51,7 +51,9 @@ class _OtpScreenState extends State<OtpScreen> {
 
   Future<void> _handleVerification() async {
   final auth = context.read<AuthController>();
-  final ok   = await auth.verifyOtp(_otp);
+  // On passe widget.phone explicitement pour éviter que _otpPhone soit null
+  // si l'état a été partiellement resetté (ex : retour depuis profile-setup).
+  final ok   = await auth.verifyOtp(_otp, phone: widget.phone);
   if (!mounted) return;
   if (!ok) return;
 
