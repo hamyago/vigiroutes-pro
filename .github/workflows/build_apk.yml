@@ -30,6 +30,7 @@ jobs:
       - name: Create local.properties
         run: |
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" >> android/local.properties
 
       - name: Decode keystore
         run: |
@@ -48,17 +49,6 @@ jobs:
       - name: Remove duplicate MainActivity
         run: |
           rm -rf android/app/src/main/kotlin/ci/oyopmt/vigiroutes/vigiroutes_provider
-
-      - name: Debug signing config
-        run: |
-          echo "=== android/app/ ==="
-          ls -la android/app/
-          echo "=== key.properties ==="
-          cat android/key.properties
-          echo "=== Taille keystore ==="
-          wc -c android/app/vigiroutes-release.jks
-          echo "=== signingConfigs dans build.gradle ==="
-          grep -A 20 "signingConfigs" android/app/build.gradle.kts || grep -A 20 "signingConfigs" android/app/build.gradle
 
       - name: Build APK Release
         run: flutter build apk --release
