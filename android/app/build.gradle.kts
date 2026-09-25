@@ -3,7 +3,6 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
@@ -16,6 +15,10 @@ val keyProperties = Properties().apply {
     }
 }
 
+val hasSigningConfig = keyPropertiesFile.exists()
+    && keyProperties.getProperty("storeFile") != null
+    && keyProperties.getProperty("keyAlias") != null
+
 android {
     namespace = "ci.oyopmt.vigiroutes.provider"
     compileSdk = flutter.compileSdkVersion
@@ -27,34 +30,40 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = "21"
-    }
-
-    signingConfigs {
-        create("release") {
-            keyAlias = keyProperties.getProperty("keyAlias")
-            keyPassword = keyProperties.getProperty("keyPassword")
-            storeFile = file(keyProperties.getProperty("storeFile"))
-            storePassword = keyProperties.getProperty("storePassword")
+    if (hasSigningConfig) {
+        signingConfigs {
+            create("release") {
+                keyAlias     = keyProperties.getProperty("keyAlias")
+                keyPassword  = keyProperties.getProperty("keyPassword")
+                storeFile    = file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+            }
         }
     }
 
     defaultConfig {
         applicationId = "ci.oyopmt.vigiroutes.provider"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        minSdk        = flutter.minSdkVersion
+        targetSdk     = flutter.targetSdkVersion
+        versionCode   = flutter.versionCode
+        versionName   = flutter.versionName
         manifestPlaceholders["MAPS_API_KEY"] = project.findProperty("MAPS_API_KEY") ?: ""
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
-            isShrinkResources = false
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            isMinifyEnabled    = false
+            isShrinkResources  = false
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
     }
 }
 
