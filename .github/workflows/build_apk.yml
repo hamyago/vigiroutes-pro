@@ -38,11 +38,17 @@ jobs:
 
       - name: Create key.properties
         run: |
-          # storeFile : chemin ABSOLU pour éviter toute ambiguïté de résolution Gradle
           echo "storeFile=${{ github.workspace }}/android/app/vigiroutes-release.jks" > android/key.properties
           echo "storePassword=${{ secrets.STORE_PASSWORD }}"                          >> android/key.properties
           echo "keyAlias=vigiroutes"                                                  >> android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}"                              >> android/key.properties
+
+      - name: Vérifier keystore et key.properties
+        run: |
+          echo "=== key.properties ==="
+          cat android/key.properties
+          echo "=== keystore ==="
+          ls -lh android/app/vigiroutes-release.jks && file android/app/vigiroutes-release.jks || echo "KEYSTORE ABSENT"
 
       - name: Remove duplicate MainActivity
         run: |
@@ -55,6 +61,10 @@ jobs:
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: flutter build apk --release
+
+      - name: Chercher l'APK produit
+        if: always()
+        run: find build/ -name "*.apk" 2>/dev/null || echo "Aucun APK trouvé"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
