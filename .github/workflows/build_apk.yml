@@ -56,15 +56,7 @@ jobs:
       - name: Build APK Release
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: flutter build apk --release 2>&1 | tee /tmp/flutter_build.log; exit ${PIPESTATUS[0]}
-
-      - name: Afficher fin du log Gradle
-        if: always()
-        run: |
-          echo "=== Dernières 100 lignes du build ==="
-          tail -100 /tmp/flutter_build.log || true
-          echo "=== APK trouvés ==="
-          find . -name "*.apk" 2>/dev/null || echo "Aucun APK"
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
