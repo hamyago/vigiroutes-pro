@@ -160,6 +160,7 @@ void main() async {
       showPreviews: AppleShowPreviewSetting.never,
       timeSensitive: AppleNotificationSetting.notSupported,
       sound: AppleNotificationSetting.notSupported,
+      providesAppNotificationSettings: AppleNotificationSetting.notSupported,
     );
   }).ignore();
 
