@@ -38,8 +38,6 @@ jobs:
 
       - name: Verifier keystore
         run: |
-          echo "=== key.properties ==="
-          cat android/key.properties || echo "ABSENT"
           echo "=== keystore ==="
           ls -lh android/app/vigiroutes-release.jks && file android/app/vigiroutes-release.jks || echo "KEYSTORE ABSENT"
 
