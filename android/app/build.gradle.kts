@@ -9,15 +9,8 @@ plugins {
 }
 
 val keyPropertiesFile = file("${rootDir}/key.properties")
-val keyProperties = Properties().apply {
-    if (keyPropertiesFile.exists()) {
-        load(FileInputStream(keyPropertiesFile))
-    }
-}
-
-val hasSigningConfig = keyPropertiesFile.exists()
-    && keyProperties.getProperty("storeFile") != null
-    && keyProperties.getProperty("keyAlias") != null
+val keyProperties = Properties()
+keyProperties.load(FileInputStream(keyPropertiesFile))
 
 android {
     namespace = "ci.oyopmt.vigiroutes.provider"
@@ -30,14 +23,12 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    if (hasSigningConfig) {
-        signingConfigs {
-            create("release") {
-                keyAlias     = keyProperties.getProperty("keyAlias")
-                keyPassword  = keyProperties.getProperty("keyPassword")
-                storeFile    = file(keyProperties.getProperty("storeFile"))
-                storePassword = keyProperties.getProperty("storePassword")
-            }
+    signingConfigs {
+        create("release") {
+            keyAlias      = keyProperties["keyAlias"] as String
+            keyPassword   = keyProperties["keyPassword"] as String
+            storeFile     = file(keyProperties["storeFile"] as String)
+            storePassword = keyProperties["storePassword"] as String
         }
     }
 
@@ -52,11 +43,9 @@ android {
 
     buildTypes {
         release {
-            if (hasSigningConfig) {
-                signingConfig = signingConfigs.getByName("release")
-            }
-            isMinifyEnabled    = false
-            isShrinkResources  = false
+            signingConfig    = signingConfigs.getByName("release")
+            isMinifyEnabled  = false
+            isShrinkResources = false
         }
     }
 }
