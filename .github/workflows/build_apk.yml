@@ -32,40 +32,16 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
           echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" >> android/local.properties
 
-      - name: Decoder et verifier keystore
+      - name: Decoder keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
-          SIZE=$(stat -c%s android/app/vigiroutes-release.jks 2>/dev/null || echo 0)
-          echo "Taille keystore: $SIZE octets"
-          if [ "$SIZE" -lt 100 ]; then
-            echo "SECRET VIDE OU CORROMPU - creation nouveau keystore"
-            keytool -genkey -v \
-              -keystore android/app/vigiroutes-release.jks \
-              -alias vigiroutes \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass "vigiroutes2024" \
-              -keypass "vigiroutes2024" \
-              -dname "CN=VigiRoutes, OU=OYOP, O=OYOPMT, L=Abidjan, ST=Abidjan, C=CI"
-            echo "NOUVEAU_KEYSTORE=true" >> $GITHUB_ENV
-          else
-            echo "Keystore OK ($SIZE octets)"
-            keytool -list -keystore android/app/vigiroutes-release.jks \
-              -storepass "${{ secrets.STORE_PASSWORD }}" || echo "MOT DE PASSE INCORRECT"
-            echo "NOUVEAU_KEYSTORE=false" >> $GITHUB_ENV
-          fi
 
       - name: Create key.properties
         run: |
-          if [ "$NOUVEAU_KEYSTORE" = "true" ]; then
-            PASS="vigiroutes2024"
-          else
-            PASS="${{ secrets.STORE_PASSWORD }}"
-            KEYPASS="${{ secrets.KEY_PASSWORD }}"
-          fi
           echo "storeFile=${{ github.workspace }}/android/app/vigiroutes-release.jks" > android/key.properties
-          echo "storePassword=$PASS" >> android/key.properties
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> android/key.properties
           echo "keyAlias=vigiroutes" >> android/key.properties
-          echo "keyPassword=${KEYPASS:-$PASS}" >> android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
 
       - name: Remove duplicate MainActivity
         run: |
@@ -79,13 +55,9 @@ jobs:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: flutter build apk --release
 
-      - name: Chercher APK produit
-        if: always()
-        run: find /home/runner/work -name "*.apk" 2>/dev/null | head -20 || echo "Aucun APK"
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: vigiroutes-pro-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: android/app/build/outputs/flutter-apk/app-release.apk
           retention-days: 30
