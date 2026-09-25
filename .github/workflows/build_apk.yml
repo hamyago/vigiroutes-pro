@@ -32,16 +32,10 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
           echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" >> android/local.properties
 
-      - name: Decoder keystore
+      - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/vigiroutes-release.jks
-
-      - name: Create key.properties
-        run: |
-          echo "storeFile=${{ github.workspace }}/android/app/vigiroutes-release.jks" > android/key.properties
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=vigiroutes" >> android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "Keystore size: $(wc -c < android/app/vigiroutes-release.jks) bytes"
 
       - name: Remove duplicate MainActivity
         run: |
@@ -50,14 +44,31 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Create key.properties
+        run: |
+          echo "storeFile=${{ github.workspace }}/android/app/vigiroutes-release.jks" > android/key.properties
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}"                          >> android/key.properties
+          echo "keyAlias=vigiroutes"                                                  >> android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}"                              >> android/key.properties
+          echo "=== key.properties ===" && cat android/key.properties
+          echo "=== keystore ===" && ls -lh android/app/vigiroutes-release.jks
+
       - name: Build APK Release
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: flutter build apk --release
+        run: flutter build apk --release 2>&1 | tee /tmp/flutter_build.log; exit ${PIPESTATUS[0]}
+
+      - name: Afficher fin du log Gradle
+        if: always()
+        run: |
+          echo "=== Dernières 100 lignes du build ==="
+          tail -100 /tmp/flutter_build.log || true
+          echo "=== APK trouvés ==="
+          find . -name "*.apk" 2>/dev/null || echo "Aucun APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: vigiroutes-pro-${{ github.run_number }}
-          path: android/app/build/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
