@@ -45,11 +45,11 @@ Future<void> _bgHandler(RemoteMessage message) async {
   final data = message.data;
   final type = data['type'] as String?;
 
-  // FIX bug 2 : gérer dispatch_alert ET new_order (les deux types envoyés
+  // Gérer dispatch_alert ET new_order (les deux types envoyés
   // par le backend pour alerter d'une nouvelle course).
   if (type != 'dispatch_alert' && type != 'new_order') return;
 
-  // FIX bug 2 : initialiser flutter_local_notifications dans cet isolate
+  // Initialiser flutter_local_notifications dans cet isolate
   // ET créer explicitement le canal avant d'appeler show().
   // Sans cette création, la notification tombe dans le canal "default"
   // (importance normale, pas de son d'alarme).
@@ -142,7 +142,7 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_bgHandler);
 
   // ── Permissions FCM ────────────────────────────────────────────────────
-  // FIX bug 2 : requestPermission() peut bloquer indéfiniment sur iOS si
+  // requestPermission() peut bloquer indéfiniment sur iOS si
   // Firebase n'est pas encore prêt. On l'enveloppe dans un timeout non-bloquant.
   FirebaseMessaging.instance.requestPermission(
     alert: true, sound: true, badge: true,
