@@ -1,23 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Service WebSocket natif — compatible avec Laravel Reverb
 /// Remplace pusher_channels_flutter (incompatible AGP 8.11+)
+///
+/// AMÉLIORATIONS v2 :
+/// - Backoff exponentiel avec cap à 60s (évite l'accumulation de timers)
+/// - Compteur de tentatives pour le diagnostic
+/// - Reconnexion propre : on ferme le canal précédent avant de rouvrir
 class RealtimeService {
   RealtimeService._();
   static final RealtimeService instance = RealtimeService._();
 
-  static const String _host      = 'api.vigiroutes.com';
-  static const String _appKey    = '642e796713cd4093e508862ee725e601';
-  static const int    _port      = 443;
-  // BUG CORRIGÉ : cette app est un PRESTATAIRE — l'auth des canaux privés
-  // doit passer par le groupe de routes 'provider' (middleware
-  // firebase.provider), pas 'user'. Sinon $request->user() ne résout pas
-  // le bon modèle et routes/channels.php refuse l'abonnement.
-  static const String _authUrl   = 'https://$_host/api/provider/broadcasting/auth';
+  static const String _host    = 'api.vigiroutes.com';
+  static const String _appKey  = '642e796713cd4093e508862ee725e601';
+  static const int    _port    = 443;
+  static const String _authUrl =
+      'https://$_host/api/provider/broadcasting/auth';
 
   WebSocketChannel? _channel;
   String?           _token;
@@ -25,10 +28,20 @@ class RealtimeService {
   bool              _connected = false;
   Timer?            _pingTimer;
   Timer?            _reconnectTimer;
-  final Dio         _authDio = Dio();
 
-  final Map<String, StreamController<Map<String,dynamic>>> _controllers = {};
-  final Map<String, Set<String>> _subscriptions = {}; // channel → events
+  // ── Backoff exponentiel ───────────────────────────────────────────────────
+  int _reconnectAttempts = 0;
+  static const int _maxBackoffSeconds = 60;
+
+  Duration get _nextBackoff {
+    // 5s, 10s, 20s, 40s, 60s max
+    final secs = min(5 * pow(2, _reconnectAttempts).toInt(), _maxBackoffSeconds);
+    return Duration(seconds: secs);
+  }
+
+  final Map<String, StreamController<Map<String, dynamic>>> _controllers = {};
+  final Map<String, Set<String>> _subscriptions = {};
+  final Dio _authDio = Dio();
 
   bool get isConnected => _connected;
 
@@ -36,10 +49,15 @@ class RealtimeService {
 
   Future<void> init(String sanctumToken) async {
     _token = sanctumToken;
+    _reconnectAttempts = 0;
     await _connect();
   }
 
   Future<void> _connect() async {
+    // Fermer proprement un éventuel canal zombie avant reconnexion
+    try { await _channel?.sink.close(); } catch (_) {}
+    _channel = null;
+
     try {
       final uri = Uri.parse(
         'wss://$_host:$_port/app/$_appKey'
@@ -48,17 +66,12 @@ class RealtimeService {
 
       _channel = WebSocketChannel.connect(uri);
 
-      // BUG CORRIGÉ : WebSocketChannel.connect() ne lève PAS l'échec de
-      // connexion (DNS, hôte injoignable, etc.) de façon fiable via
-      // stream.listen(onError: ...) — c'est un problème connu du package.
-      // Sans ce `await ... .ready`, une simple coupure réseau/DNS
-      // ("Failed host lookup") remontait comme exception NON rattrapée
-      // jusqu'au gestionnaire d'erreur global de l'app -> crash -> retour
-      // au splashscreen (280 occurrences en 7 jours pour un seul
-      // utilisateur avant ce correctif).
+      // Sans `await ready`, les erreurs DNS/réseau ne sont pas rattrapées
+      // de façon fiable et remontent comme exceptions non gérées → crash.
       await _channel!.ready;
 
       _connected = true;
+      _reconnectAttempts = 0; // succès → réinitialiser le compteur
 
       _channel!.stream.listen(
         _onMessage,
@@ -66,12 +79,13 @@ class RealtimeService {
         onDone:  _onDone,
       );
 
-      // Ping toutes les 30s pour garder la connexion vivante
-      _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) => _ping());
+      _pingTimer?.cancel();
+      _pingTimer =
+          Timer.periodic(const Duration(seconds: 30), (_) => _ping());
 
       debugPrint('[WS] Connecté à Reverb');
     } catch (e) {
-      debugPrint('[WS] Erreur connexion : $e');
+      debugPrint('[WS] Erreur connexion (tentative $_reconnectAttempts) : $e');
       _connected = false;
       _scheduleReconnect();
     }
@@ -79,20 +93,15 @@ class RealtimeService {
 
   void _onMessage(dynamic raw) {
     try {
-      final msg  = jsonDecode(raw as String) as Map<String, dynamic>;
-      final event= msg['event'] as String? ?? '';
-      final chan  = msg['channel'] as String? ?? '';
+      final msg   = jsonDecode(raw as String) as Map<String, dynamic>;
+      final event = msg['event'] as String? ?? '';
+      final chan   = msg['channel'] as String? ?? '';
 
-      // Répondre au ping Pusher
       if (event == 'pusher:ping') {
         _send({'event': 'pusher:pong', 'data': {}});
         return;
       }
 
-      // Connexion établie — récupérer le socket_id, indispensable pour
-      // authentifier ensuite les canaux privés (BUG CORRIGÉ : jamais
-      // capturé avant, donc l'auth des canaux privés était impossible
-      // même une fois la signature du serveur obtenue).
       if (event == 'pusher:connection_established') {
         try {
           final data = msg['data'];
@@ -111,15 +120,14 @@ class RealtimeService {
         return;
       }
 
-      // Diffuser aux controllers abonnés
       final key = '$chan:$event';
       if (_controllers.containsKey(key)) {
         final data = msg['data'];
-        Map<String,dynamic> parsed;
+        Map<String, dynamic> parsed;
         if (data is String) {
-          parsed = jsonDecode(data) as Map<String,dynamic>;
+          parsed = jsonDecode(data) as Map<String, dynamic>;
         } else if (data is Map) {
-          parsed = Map<String,dynamic>.from(data);
+          parsed = Map<String, dynamic>.from(data);
         } else {
           parsed = {};
         }
@@ -145,8 +153,13 @@ class RealtimeService {
   void _scheduleReconnect() {
     _pingTimer?.cancel();
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 5), () async {
-      debugPrint('[WS] Reconnexion...');
+
+    final delay = _nextBackoff;
+    _reconnectAttempts++;
+    debugPrint('[WS] Reconnexion dans ${delay.inSeconds}s '
+        '(tentative $_reconnectAttempts)');
+
+    _reconnectTimer = Timer(delay, () async {
       await _connect();
     });
   }
@@ -165,14 +178,6 @@ class RealtimeService {
 
   // ── Souscription aux canaux privés ─────────────────────────────────────────
 
-  /// BUG CORRIGÉ : envoyait 'auth': '' (chaîne vide) en supposant que
-  /// Reverb générait l'authentification côté serveur automatiquement —
-  /// faux. Pour un canal privé, c'est le CLIENT qui doit demander une
-  /// signature au serveur (POST /broadcasting/auth avec channel_name +
-  /// socket_id + le token Firebase), signature que Reverb vérifie avant
-  /// d'accepter l'abonnement. Sans ça, Reverb rejette silencieusement
-  /// tout abonnement à un canal privé — aucune mise à jour temps réel
-  /// (nouvelles demandes, statut, position) n'a jamais pu arriver.
   Future<void> _subscribeChannel(String channel) async {
     if (!channel.startsWith('private-')) {
       _send({'event': 'pusher:subscribe', 'data': {'channel': channel}});
@@ -184,11 +189,9 @@ class RealtimeService {
       return;
     }
 
-    // L'app Pro utilise Sanctum (pas Firebase Auth) — on passe directement
-    // le token Sanctum stocké au login pour authentifier les canaux privés.
     final freshToken = _token;
     if (freshToken == null) {
-      debugPrint('[WS] Abonnement à $channel différé (aucun jeton disponible)');
+      debugPrint('[WS] Abonnement à $channel différé (aucun jeton)');
       return;
     }
 
@@ -222,23 +225,23 @@ class RealtimeService {
     }
   }
 
-  Stream<Map<String,dynamic>> subscribeToIntervention(String userId) =>
+  Stream<Map<String, dynamic>> subscribeToIntervention(String userId) =>
       _subscribe('private-provider.$userId', 'intervention.updated');
 
-  Stream<Map<String,dynamic>> subscribeToDispatch(String providerId) =>
+  Stream<Map<String, dynamic>> subscribeToDispatch(String providerId) =>
       _subscribe('private-provider.$providerId', 'intervention.updated');
 
-  Stream<Map<String,dynamic>> subscribeToAdminInterventions() =>
+  Stream<Map<String, dynamic>> subscribeToAdminInterventions() =>
       _subscribe('private-admin.interventions', 'intervention.updated');
 
-  Stream<Map<String,dynamic>> subscribeToEmergencies() =>
+  Stream<Map<String, dynamic>> subscribeToEmergencies() =>
       _subscribe('private-admin.interventions', 'emergency.created');
 
-  Stream<Map<String,dynamic>> _subscribe(String channel, String event) {
+  Stream<Map<String, dynamic>> _subscribe(String channel, String event) {
     final key = '$channel:$event';
 
     if (!_controllers.containsKey(key)) {
-      _controllers[key] = StreamController<Map<String,dynamic>>.broadcast();
+      _controllers[key] = StreamController<Map<String, dynamic>>.broadcast();
       _subscriptions.putIfAbsent(channel, () => {}).add(event);
       if (_connected) _subscribeChannel(channel);
     }
@@ -251,13 +254,14 @@ class RealtimeService {
   Future<void> disconnect() async {
     _pingTimer?.cancel();
     _reconnectTimer?.cancel();
-    await _channel?.sink.close();
+    try { await _channel?.sink.close(); } catch (_) {}
     for (final ctrl in _controllers.values) {
       await ctrl.close();
     }
     _controllers.clear();
     _subscriptions.clear();
     _connected = false;
+    _reconnectAttempts = 0;
     debugPrint('[WS] Déconnecté');
   }
 }

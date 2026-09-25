@@ -81,15 +81,13 @@ class ApiService {
       _dio.delete(path);
 
   // ══════════════════════════════════════════════════════════════════════
-  //  Auth — Termii OTP (nouveau flux)
+  //  Auth — Termii OTP
   // ══════════════════════════════════════════════════════════════════════
 
-  /// Demande l'envoi d'un OTP au numéro donné.
   Future<void> sendOtp(String phone) async {
     await post('/auth/otp/send', data: {'phone': phone});
   }
 
-  /// Vérifie l'OTP et connecte/crée un PRESTATAIRE.
   Future<Map<String, dynamic>> verifyOtpProvider({
     required String phone,
     required String otp,
@@ -114,7 +112,6 @@ class ApiService {
     );
     final data = (res.data as Map).cast<String, dynamic>();
 
-    // Nouveau prestataire : le backend renvoie is_new sans token
     if (data['is_new'] == true && data['token'] == null) {
       return {'is_new': true, 'phone': phone};
     }
@@ -124,7 +121,6 @@ class ApiService {
     return data;
   }
 
-  /// Complète le profil prestataire après OTP (quand is_new = true).
   Future<Map<String, dynamic>> completeProviderProfile({
     required String phone,
     required String name,
@@ -199,7 +195,14 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<void> cancelIntervention(String id, {String? reason}) =>
+  // ── CORRECTION : route provider pour annuler une intervention acceptée ──
+  // Avant : appelait /user/interventions/$id/cancel (route user!)
+  // Correction : /provider/interventions/$id/cancel (route prestataire)
+  Future<void> cancelAcceptedIntervention(String id, {String? reason}) =>
+      post('/provider/interventions/$id/cancel', data: {'reason': reason});
+
+  // Annulation côté user (gardée pour usage éventuel côté client)
+  Future<void> cancelUserIntervention(String id, {String? reason}) =>
       post('/user/interventions/$id/cancel', data: {'reason': reason});
 
   Future<void> declineDispatchedIntervention(String id) =>
@@ -268,7 +271,8 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> completeIntervention(String id, {required double finalAmount}) async {
+  Future<Map<String, dynamic>> completeIntervention(String id,
+      {required double finalAmount}) async {
     final res = await post('/provider/interventions/$id/complete', data: {
       'final_amount': finalAmount,
     });
@@ -305,10 +309,10 @@ class ApiService {
     } catch (_) { return []; }
   }
 
-  Future<void> updateProviderLocation(String interventionId, double lat, double lng) =>
-      post('/provider/interventions/$interventionId/location', data: {
-        'latitude': lat, 'longitude': lng,
-      });
+  Future<void> updateProviderLocation(
+          String interventionId, double lat, double lng) =>
+      post('/provider/interventions/$interventionId/location',
+          data: {'latitude': lat, 'longitude': lng});
 
   Future<void> updateAvailability(bool available) =>
       patch('/provider/availability', data: {'is_available': available});
@@ -333,9 +337,9 @@ class ApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  Future<Map<String,dynamic>> updateProvider(Map<String,dynamic> data) async {
+  Future<Map<String, dynamic>> updateProvider(Map<String, dynamic> data) async {
     final res = await patch('/provider/me', data: data);
-    return res.data as Map<String,dynamic>;
+    return res.data as Map<String, dynamic>;
   }
 
   Future<List<dynamic>> getProviderSubscriptionPlans() async {
@@ -361,23 +365,16 @@ class ApiService {
     return const [];
   }
 
-  Future<Map<String, dynamic>> subscribeProvider(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> subscribeProvider(
+      Map<String, dynamic> data) async {
     final res = await post('/provider/subscription/subscribe', data: data);
     return res.data as Map<String, dynamic>;
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  Recharge DigitalPaye (Mobile Money réel — prestataire)
+  //  Recharge DigitalPaye (Mobile Money — prestataire)
   // ══════════════════════════════════════════════════════════════════════
 
-  /// Initie une recharge via DigitalPaye (prestataire).
-  ///
-  /// [operatorCode] : 'ORANGE_MONEY_CI' | 'MTN_MONEY_CI' | 'WAVE_MONEY_CI'
-  /// [otp]         : requis uniquement pour Orange Money.
-  /// [payerPhone]  : numéro Mobile Money qui paie (10 chiffres).
-  ///
-  /// Retourne { success, reference, status, payment_url?, message }.
-  /// Pour Wave, [payment_url] est non-null → ouvrir dans le navigateur.
   Future<Map<String, dynamic>> initiateProviderRecharge({
     required int amount,
     required String operatorCode,
@@ -393,8 +390,8 @@ class ApiService {
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  /// Récupère le statut d'une recharge : 'pending' | 'success' | 'failed'.
-  Future<Map<String, dynamic>> getProviderRechargeStatus(String reference) async {
+  Future<Map<String, dynamic>> getProviderRechargeStatus(
+      String reference) async {
     final res = await get('/provider/recharge/$reference/status');
     return (res.data as Map).cast<String, dynamic>();
   }
@@ -423,8 +420,8 @@ class ApiService {
     double radiusKm = 3,
   }) async {
     final res = await get('/provider/parts/search', params: {
-      'q': query,
-      'latitude': latitude,
+      'q':         query,
+      'latitude':  latitude,
       'longitude': longitude,
       'radius_km': radiusKm,
     });
@@ -446,9 +443,9 @@ class ApiService {
   }) async {
     final res = await post('/provider/parts/orders', data: {
       'store_id': storeId,
-      'items': items,
+      'items':    items,
       if (note != null && note.isNotEmpty) 'note': note,
-      if (deliveryLatitude != null) 'delivery_latitude': deliveryLatitude,
+      if (deliveryLatitude  != null) 'delivery_latitude':  deliveryLatitude,
       if (deliveryLongitude != null) 'delivery_longitude': deliveryLongitude,
       if (deliveryAddress != null && deliveryAddress.isNotEmpty)
         'delivery_address': deliveryAddress,

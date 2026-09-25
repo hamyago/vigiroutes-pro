@@ -12,29 +12,29 @@ import '../../home/controllers/provider_controller.dart';
 import '../../team/widgets/assign_assistant_sheet.dart';
 import '../../auth/controllers/auth_controller.dart';
 
-/// AVANT : cet écran embarquait un widget GoogleMap natif avec marqueurs
-/// client/prestataire, qui faisait planter l'app (retour au splashscreen)
-/// à l'ouverture. Plutôt que de continuer à deviner la cause exacte côté
-/// SDK Maps natif (non diagnosticable sans device physique), on retire
-/// complètement la carte intégrée : la navigation réelle passe par
-/// l'app Google Maps externe (déjà en place via _openNavigation), qui le
-/// fait de toute façon mieux qu'une carte intégrée statique. Ça élimine
-/// toute la surface de plantage liée au rendu natif de la carte ici.
+/// Écran d'intervention : navigation, démarrage, finalisation, notation.
+///
+/// La carte Google Maps intégrée a été retirée (causait des crashs non
+/// diagnostiquables sans device physique). La navigation réelle passe par
+/// Google Maps externe via `_openNavigation()`.
 class ProviderNavigationScreen extends StatefulWidget {
   final String interventionId;
-  const ProviderNavigationScreen({super.key, required this.interventionId});
+  const ProviderNavigationScreen(
+      {super.key, required this.interventionId});
 
   @override
-  State<ProviderNavigationScreen> createState() => _ProviderNavigationScreenState();
+  State<ProviderNavigationScreen> createState() =>
+      _ProviderNavigationScreenState();
 }
 
-class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
+class _ProviderNavigationScreenState
+    extends State<ProviderNavigationScreen> {
   final _api      = ApiService.instance;
   final _realtime = RealtimeService.instance;
 
-  InterventionModel?  _intervention;
+  InterventionModel? _intervention;
   StreamSubscription? _wsSub;
-  bool                _loadError = false;
+  bool _loadError = false;
 
   @override
   void initState() {
@@ -51,7 +51,7 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
       if (mounted) {
         setState(() {
           _intervention = InterventionModel.fromJson(data);
-          _loadError = false;
+          _loadError    = false;
         });
       }
     } catch (e) {
@@ -61,22 +61,21 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
   }
 
   void _subscribeToUpdates() {
-    final providerId = context.read<AuthController>().provider?.id ?? '';
-    _wsSub = _realtime.subscribeToDispatch(providerId)
+    final providerId =
+        context.read<AuthController>().provider?.id ?? '';
+    _wsSub = _realtime
+        .subscribeToDispatch(providerId)
         .where((data) => data['id'] == widget.interventionId)
         .listen((data) {
-          if (!mounted) return;
-          // BUG CORRIGÉ : le payload WS ne contient qu'un sous-ensemble des
-          // champs. Le repli InterventionModel.fromJson(data) sur ce
-          // payload partiel plantait (champs obligatoires absents, ex.
-          // user_id) si un message WS arrivait avant la fin du chargement
-          // REST initial. On ignore simplement la mise à jour dans ce cas
-          // rare — le chargement REST (déjà en cours) prendra le relais.
-          if (_intervention == null) return;
-          setState(() {
-            _intervention = _intervention!.copyWithWs(data);
-          });
-        });
+      if (!mounted) return;
+      // Si le chargement REST n'est pas encore terminé, on ignore
+      // la mise à jour WS partielle pour éviter un crash sur les
+      // champs obligatoires manquants.
+      if (_intervention == null) return;
+      setState(() {
+        _intervention = _intervention!.copyWithWs(data);
+      });
+    });
   }
 
   @override
@@ -100,7 +99,8 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
       await _loadIntervention();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ctrl.actionError ?? 'Réaffectation impossible.')));
+          content: Text(
+              ctrl.actionError ?? 'Réaffectation impossible.')));
     }
   }
 
@@ -108,8 +108,10 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
     final i = _intervention;
     if (i == null) return;
     final url = 'https://www.google.com/maps/dir/?api=1'
-        '&destination=${i.userLatitude},${i.userLongitude}&travelmode=driving';
-    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        '&destination=${i.userLatitude},${i.userLongitude}'
+        '&travelmode=driving';
+    await launchUrl(Uri.parse(url),
+        mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -123,15 +125,18 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back_ios_new,
+              color: Colors.black87),
           onPressed: () => context.go('/provider/home'),
         ),
         title: const Text('Intervention',
-            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+            style: TextStyle(
+                color: Colors.black87, fontWeight: FontWeight.w600)),
         actions: [
           if (i != null)
             IconButton(
-              icon: const Icon(Icons.navigation, color: AppColors.primary),
+              icon:
+                  const Icon(Icons.navigation, color: AppColors.primary),
               tooltip: 'Ouvrir Google Maps',
               onPressed: _openNavigation,
             ),
@@ -167,55 +172,82 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // CORRECTION : le StatusChip affichait
+                  // 'dispatching' → "Envoyée au client" — c'est
+                  // le backend qui dispatche VERS le prestataire.
+                  // Label corrigé : "Demande reçue".
                   _StatusChip(status: i.status),
                   const SizedBox(height: 20),
 
-                  // ── Carte info client + service ──────────────────────────
+                  // ── Carte info client ──────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 10,
+                        ),
                       ],
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Container(
-                          width: 46, height: 46,
-                          decoration: const BoxDecoration(
-                              color: AppColors.primaryLight, shape: BoxShape.circle),
-                          child: const Center(child: Text('👤', style: TextStyle(fontSize: 22))),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          // BUG CORRIGÉ : affichait i.provider?.name (le nom
-                          // du prestataire lui-même) au lieu du client.
-                          Text(i.userName ?? 'Client',
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                          Text('${i.serviceTypeName} — ${PriceCalculator.formatFcfa(i.totalPrice)}',
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                        ])),
-                      ]),
-                      if (i.userAddress != null) ...[
-                        const SizedBox(height: 12),
-                        const Divider(height: 1),
-                        const SizedBox(height: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Row(children: [
-                          const Icon(Icons.location_on_outlined,
-                              size: 18, color: AppColors.textMuted),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(i.userAddress!,
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
+                          Container(
+                            width: 46, height: 46,
+                            decoration: const BoxDecoration(
+                                color: AppColors.primaryLight,
+                                shape: BoxShape.circle),
+                            child: const Center(
+                                child: Text('👤',
+                                    style: TextStyle(fontSize: 22))),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(i.userName ?? 'Client',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16)),
+                                Text(
+                                  '${i.serviceTypeName} — ${PriceCalculator.formatFcfa(i.totalPrice)}',
+                                  style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
                         ]),
+                        if (i.userAddress != null) ...[
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            const Icon(Icons.location_on_outlined,
+                                size: 18, color: AppColors.textMuted),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(i.userAddress!,
+                                  style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13)),
+                            ),
+                          ]),
+                        ],
                       ],
-                    ]),
+                    ),
                   ),
 
                   const SizedBox(height: 16),
 
-                  // ── Intervenant affecté (réaffectation possible) ─────────
+                  // ── Intervenant affecté ────────────────────────────────
                   if (i.isAccepted || i.isInProgress) ...[
                     _AssigneeCard(
                       intervention: i,
@@ -224,33 +256,38 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // ── Bouton navigation externe (principal) ────────────────
+                  // ── Navigation externe ─────────────────────────────────
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: _openNavigation,
                       icon: const Icon(Icons.navigation),
-                      label: const Text('Ouvrir l\'itinéraire dans Google Maps'),
+                      label: const Text(
+                          'Ouvrir l\'itinéraire dans Google Maps'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
+                        side: const BorderSide(
+                            color: AppColors.primary),
                         minimumSize: const Size(0, 48),
                       ),
                     ),
                   ),
 
-                  // AJOUTÉ : commander des pièces pendant l'intervention.
+                  // ── Commander des pièces pendant l'intervention ────────
                   if (i.isAccepted || i.isInProgress) ...[
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: () => context.push('/provider/parts'),
-                        icon: const Icon(Icons.build_circle_outlined),
+                        onPressed: () =>
+                            context.push('/provider/parts'),
+                        icon: const Icon(
+                            Icons.build_circle_outlined),
                         label: const Text('Commander des pièces'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.textPrimary,
-                          side: const BorderSide(color: AppColors.border),
+                          side: const BorderSide(
+                              color: AppColors.border),
                           minimumSize: const Size(0, 48),
                         ),
                       ),
@@ -259,22 +296,25 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
 
                   const SizedBox(height: 24),
 
-                  // ── Actions selon le statut ───────────────────────────────
+                  // ── Actions selon le statut ────────────────────────────
                   if (i.isAccepted)
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () async {
-                          final ok = await ctrl.startIntervention(i.id);
+                          final ok =
+                              await ctrl.startIntervention(i.id);
                           if (!ok && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(ctrl.actionError ??
-                                    'Erreur lors du démarrage.')));
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(
+                                    content: Text(ctrl.actionError ??
+                                        'Erreur lors du démarrage.')));
                           }
                         },
                         icon: const Icon(Icons.build, size: 18),
                         label: const Text('Démarrer l\'intervention'),
-                        style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
+                        style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(0, 48)),
                       ),
                     ),
 
@@ -283,28 +323,23 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () async {
-                          // NOUVEAU : le prestataire doit saisir le montant
-                          // final réellement payé par le client, pré-rempli
-                          // avec l'estimation mais ajustable. C'est ce
-                          // montant qui sert de base à la commission et à
-                          // la déduction du crédit d'abonnement.
-                          final finalAmount = await _askFinalAmount(context, i.totalPrice);
-                          if (finalAmount == null) return; // Annulé.
+                          final finalAmount = await _askFinalAmount(
+                              context, i.totalPrice);
+                          if (finalAmount == null) return;
 
-                          final success = await ctrl.completeIntervention(
-                              i.id, finalAmount: finalAmount);
+                          final success =
+                              await ctrl.completeIntervention(
+                                  i.id,
+                                  finalAmount: finalAmount);
                           if (!context.mounted) return;
                           if (success) {
-                            // BUG CORRIGÉ : naviguait direct vers l'accueil,
-                            // sans jamais laisser voir le bouton "Noter le
-                            // client" (qui ne s'affiche que si on reste sur
-                            // cet écran). On va maintenant directement à
-                            // l'écran de notation.
+                            // Aller directement à l'écran de notation
                             context.go('/provider/review/${i.id}');
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(ctrl.actionError ??
-                                    'Erreur lors de la finalisation.')));
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(
+                                    content: Text(ctrl.actionError ??
+                                        'Erreur lors de la finalisation.')));
                           }
                         },
                         icon: const Icon(Icons.check_circle, size: 18),
@@ -317,21 +352,29 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
                     ),
 
                   if (i.isCompleted)
-                    Center(child: Column(children: [
-                      const SizedBox(height: 20),
-                      const Text('✅ Intervention terminée !',
-                          style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: () => context.push('/provider/review/${i.id}'),
-                        icon: const Icon(Icons.star_rounded, size: 18),
-                        label: const Text('Noter le client'),
-                      ),
-                      TextButton(
-                        onPressed: () => context.go('/provider/home'),
-                        child: const Text('Retour à l\'accueil'),
-                      ),
-                    ])),
+                    Center(
+                      child: Column(children: [
+                        const SizedBox(height: 20),
+                        const Text('✅ Intervention terminée !',
+                            style: TextStyle(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () =>
+                              context.push('/provider/review/${i.id}'),
+                          icon: const Icon(Icons.star_rounded,
+                              size: 18),
+                          label: const Text('Noter le client'),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              context.go('/provider/home'),
+                          child:
+                              const Text('Retour à l\'accueil'),
+                        ),
+                      ]),
+                    ),
                 ],
               ),
             ),
@@ -339,42 +382,57 @@ class _ProviderNavigationScreenState extends State<ProviderNavigationScreen> {
   }
 }
 
+// ── Widgets internes ──────────────────────────────────────────────────────────
+
 class _AssigneeCard extends StatelessWidget {
   final InterventionModel intervention;
   final VoidCallback onChange;
-  const _AssigneeCard({required this.intervention, required this.onChange});
+  const _AssigneeCard(
+      {required this.intervention, required this.onChange});
 
   @override
   Widget build(BuildContext context) {
-    final a = intervention.assignedAssistant;
+    final a      = intervention.assignedAssistant;
     final isSelf = a == null;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.25)),
       ),
       child: Row(children: [
         CircleAvatar(
           radius: 22,
           backgroundColor: AppColors.primaryLight,
-          backgroundImage: (!isSelf && a.photoUrl != null && a.photoUrl!.isNotEmpty)
+          backgroundImage: (!isSelf &&
+                  a.photoUrl != null &&
+                  a.photoUrl!.isNotEmpty)
               ? NetworkImage(a.photoUrl!)
               : null,
-          child: (isSelf || a.photoUrl == null || a.photoUrl!.isEmpty)
-              ? Text(isSelf ? '🧑' : '🧑‍🔧', style: const TextStyle(fontSize: 20))
+          child: (isSelf ||
+                  a.photoUrl == null ||
+                  a.photoUrl!.isEmpty)
+              ? Text(isSelf ? '🧑' : '🧑‍🔧',
+                  style: const TextStyle(fontSize: 20))
               : null,
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Intervenant',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
-            const SizedBox(height: 2),
-            Text(isSelf ? 'Moi-même' : a.name,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Intervenant',
+                  style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11.5)),
+              const SizedBox(height: 2),
+              Text(isSelf ? 'Moi-même' : a.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 15)),
+            ],
+          ),
         ),
         TextButton.icon(
           onPressed: onChange,
@@ -386,6 +444,8 @@ class _AssigneeCard extends StatelessWidget {
   }
 }
 
+/// Chip de statut — libellés corrigés pour refléter le flux réel.
+/// 'dispatching' = demande reçue par le prestataire (pas "envoyée au client").
 class _StatusChip extends StatelessWidget {
   final String status;
   const _StatusChip({required this.status});
@@ -393,16 +453,17 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (status) {
-      'pending'     => ('En attente',              AppColors.warning, '⏳'),
-      'dispatching' => ('Envoyée au client',        AppColors.warning, '📨'),
-      'accepted'    => ('En route vers le client',  AppColors.primary, '🚗'),
-      'in_progress' => ('Intervention en cours',    AppColors.success, '🔧'),
-      'completed'   => ('Intervention terminée',    AppColors.success, '✅'),
-      'cancelled'   => ('Annulée',                  AppColors.error,   '❌'),
-      _             => ('En attente',               AppColors.warning, '⏳'),
+      'pending'     => ('Demande reçue',              AppColors.warning, '📩'),
+      'dispatching' => ('Demande reçue',              AppColors.warning, '📩'),
+      'accepted'    => ('En route vers le client',    AppColors.primary, '🚗'),
+      'in_progress' => ('Intervention en cours',      AppColors.success, '🔧'),
+      'completed'   => ('Intervention terminée',      AppColors.success, '✅'),
+      'cancelled'   => ('Annulée',                    AppColors.error,   '❌'),
+      _             => ('En attente',                 AppColors.warning, '⏳'),
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
@@ -410,17 +471,21 @@ class _StatusChip extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(icon),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+        Text(label,
+            style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 13)),
       ]),
     );
   }
 }
 
-/// Popup obligatoire avant de terminer une intervention : le prestataire
-/// saisit le montant final réellement payé par le client, pré-rempli avec
-/// l'estimation initiale mais librement ajustable. Retourne null si annulé.
-Future<double?> _askFinalAmount(BuildContext context, double defaultAmount) {
-  final ctrl = TextEditingController(text: defaultAmount.toStringAsFixed(0));
+/// Popup de saisie du montant final avant de terminer l'intervention.
+Future<double?> _askFinalAmount(
+    BuildContext context, double defaultAmount) {
+  final ctrl = TextEditingController(
+      text: defaultAmount.toStringAsFixed(0));
   String? error;
 
   return showDialog<double>(
@@ -428,22 +493,25 @@ Future<double?> _askFinalAmount(BuildContext context, double defaultAmount) {
     barrierDismissible: false,
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setState) => AlertDialog(
-        title: const Text('Montant final de l\'intervention'),
+        title:
+            const Text('Montant final de l\'intervention'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Saisissez le montant réellement payé par le client. '
-              'Ce montant sera affiché au client et servira de base au '
-              'calcul de la commission.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              'Ce montant servira de base au calcul de la commission.',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: ctrl,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: false),
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: false),
               decoration: InputDecoration(
                 labelText: 'Montant (FCFA)',
                 suffixText: 'FCFA',
@@ -451,7 +519,9 @@ Future<double?> _askFinalAmount(BuildContext context, double defaultAmount) {
                 errorText: error,
               ),
               onChanged: (_) {
-                if (error != null) setState(() => error = null);
+                if (error != null) {
+                  setState(() => error = null);
+                }
               },
             ),
           ],
@@ -463,9 +533,11 @@ Future<double?> _askFinalAmount(BuildContext context, double defaultAmount) {
           ),
           ElevatedButton(
             onPressed: () {
-              final value = double.tryParse(ctrl.text.trim().replaceAll(' ', ''));
+              final value = double.tryParse(
+                  ctrl.text.trim().replaceAll(' ', ''));
               if (value == null || value < 500) {
-                setState(() => error = 'Montant invalide (minimum 500 FCFA)');
+                setState(() => error =
+                    'Montant invalide (minimum 500 FCFA)');
                 return;
               }
               Navigator.pop(dialogContext, value);

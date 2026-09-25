@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -24,7 +25,6 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
       final auth = context.read<AuthController>();
       final ctrl = context.read<ProviderController>();
       if (auth.provider != null) {
-        // initialize() est idempotent — safe à appeler plusieurs fois
         ctrl.initialize(auth.provider!);
       }
     });
@@ -32,8 +32,8 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ctrl = context.watch<ProviderController>();
-    final auth = context.watch<AuthController>();
+    final ctrl     = context.watch<ProviderController>();
+    final auth     = context.watch<AuthController>();
     final provider = auth.provider;
 
     return Scaffold(
@@ -44,7 +44,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // ── Header ──────────────────────────────────────────────────
               Row(
                 children: [
                   Expanded(
@@ -72,7 +72,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                       ],
                     ),
                   ),
-                  // Availability toggle
+                  // Toggle disponibilité
                   Column(
                     children: [
                       Switch(
@@ -96,7 +96,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // Stats row
+              // ── Statistiques ─────────────────────────────────────────────
               Row(
                 children: [
                   Expanded(
@@ -112,8 +112,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                     child: _StatCard(
                       emoji: '🔧',
                       label: 'Terminées',
-                      value:
-                          '${ctrl.myInterventions.where((i) => i.isCompleted).length}',
+                      value: '${ctrl.myInterventions.where((i) => i.isCompleted).length}',
                       color: AppColors.primary,
                     ),
                   ),
@@ -122,9 +121,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // AJOUTÉ : accès bien visible à la commande de pièces auto,
-              // demandé explicitement (auparavant seulement dans le menu
-              // profil et sur l'écran d'intervention en cours).
+              // ── Pièces auto ──────────────────────────────────────────────
               InkWell(
                 onTap: () => context.push('/provider/parts'),
                 borderRadius: BorderRadius.circular(16),
@@ -145,7 +142,8 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Center(
-                            child: Text('🔩', style: TextStyle(fontSize: 22))),
+                            child: Text('🔩',
+                                style: TextStyle(fontSize: 22))),
                       ),
                       const SizedBox(width: 14),
                       const Expanded(
@@ -158,8 +156,8 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                                     fontWeight: FontWeight.w700,
                                     fontSize: 15)),
                             Text('Commandez des pièces chez un magasin proche',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 12)),
+                                style:
+                                    TextStyle(color: Colors.white70, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -171,7 +169,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // Active intervention
+              // ── Intervention active ───────────────────────────────────────
               if (ctrl.activeIntervention != null) ...[
                 _ActiveInterventionCard(
                   intervention: ctrl.activeIntervention!,
@@ -180,23 +178,19 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Pending requests
+              // ── Demandes en attente ───────────────────────────────────────
               Row(
                 children: [
                   const Text(
                     'Demandes en attente',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 8),
                   if (ctrl.pendingRequests.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.accent,
                         borderRadius: BorderRadius.circular(10),
@@ -235,48 +229,48 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                   ),
                 )
               else
-                ...ctrl.pendingRequests
-                    .map((req) => _RequestCard(
-                          request: req,
-                          onAccept: () async {
-                            // Si le prestataire a des assistants, on lui
-                            // demande qui va intervenir (lui-même par
-                            // défaut) AVANT d'accepter. S'il n'en a aucun,
-                            // le flux reste strictement identique à avant.
-                            int? assistantId;
-                            if (ctrl.assistants.isNotEmpty) {
-                              final choice = await showAssignAssistantSheet(
-                                context,
-                                assistants: ctrl.assistants,
-                                currentAssistantId: null,
-                                title: 'Qui va intervenir ?',
-                              );
-                              if (choice == null) return; // annulé -> pas d'acceptation
-                              assistantId = choice.assistantId;
-                            }
-                            final ok = await ctrl.acceptIntervention(
-                                req.id, assignedAssistantId: assistantId);
-                            if (!context.mounted) return;
-                            if (ok) {
-                              context.push(req.isCTTransport
-                                  ? '/provider/ct-transport/${req.ctBookingId ?? req.id}'
-                                  : '/provider/navigation/${req.id}');
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                ...ctrl.pendingRequests.map((req) => _RequestCard(
+                      request: req,
+                      secondsLeft: ctrl.dispatchSecondsLeft(req.id),
+                      onAccept: () async {
+                        int? assistantId;
+                        if (ctrl.assistants.isNotEmpty) {
+                          final choice =
+                              await showAssignAssistantSheet(
+                            context,
+                            assistants: ctrl.assistants,
+                            currentAssistantId: null,
+                            title: 'Qui va intervenir ?',
+                          );
+                          if (choice == null) return;
+                          assistantId = choice.assistantId;
+                        }
+                        final ok = await ctrl.acceptIntervention(
+                            req.id,
+                            assignedAssistantId: assistantId);
+                        if (!context.mounted) return;
+                        if (ok) {
+                          context.push(req.isCTTransport
+                              ? '/provider/ct-transport/${req.ctBookingId ?? req.id}'
+                              : '/provider/navigation/${req.id}');
+                        } else {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(
                                   content: Text(ctrl.actionError ??
                                       'Erreur lors de l\'acceptation.')));
-                            }
-                          },
-                          onDecline: () async {
-                            final ok = await ctrl.declineIntervention(req.id);
-                            if (!ok && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        }
+                      },
+                      onDecline: () async {
+                        final ok =
+                            await ctrl.declineIntervention(req.id);
+                        if (!ok && context.mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(
                                   content: Text(ctrl.actionError ??
                                       'Erreur lors du refus.')));
-                            }
-                          },
-                        ))
-                    ,
+                        }
+                      },
+                    )),
             ],
           ),
         ),
@@ -285,6 +279,8 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     );
   }
 }
+
+// ── Widgets ────────────────────────────────────────────────────────────────────
 
 class _StatCard extends StatelessWidget {
   final String emoji;
@@ -316,21 +312,14 @@ class _StatCard extends StatelessWidget {
           children: [
             Text(emoji, style: const TextStyle(fontSize: 24)),
             const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: color,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 12,
-              ),
-            ),
+            Text(value,
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: color)),
+            Text(label,
+                style: const TextStyle(
+                    color: AppColors.textMuted, fontSize: 12)),
           ],
         ),
       );
@@ -366,27 +355,27 @@ class _ActiveInterventionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  isCT ? '🚗 Mission CT en cours' : '🔧 Intervention en cours',
+                  isCT
+                      ? '🚗 Mission CT en cours'
+                      : '🔧 Intervention en cours',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15),
                 ),
               ),
-              // Bouton annuler discret
               GestureDetector(
                 onTap: () => _confirmCancel(context),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'Annuler',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
+                  child: const Text('Annuler',
+                      style:
+                          TextStyle(color: Colors.white70, fontSize: 12)),
                 ),
               ),
             ],
@@ -444,7 +433,8 @@ class _ActiveInterventionCard extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+                foregroundColor: AppColors.error),
             child: const Text('Oui, annuler'),
           ),
         ],
@@ -455,136 +445,206 @@ class _ActiveInterventionCard extends StatelessWidget {
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ctrl.actionError ?? 'Impossible d\'annuler.'),
+        content:
+            Text(ctrl.actionError ?? 'Impossible d\'annuler.'),
       ));
     }
   }
 }
 
-class _RequestCard extends StatelessWidget {
+/// Carte de demande avec compte à rebours dynamique intégré.
+class _RequestCard extends StatefulWidget {
   final InterventionModel request;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
+  final int?              secondsLeft;
+  final VoidCallback      onAccept;
+  final VoidCallback      onDecline;
+
   const _RequestCard({
     required this.request,
+    required this.secondsLeft,
     required this.onAccept,
     required this.onDecline,
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+  State<_RequestCard> createState() => _RequestCardState();
+}
+
+class _RequestCardState extends State<_RequestCard> {
+  @override
+  Widget build(BuildContext context) {
+    final sLeft = widget.secondsLeft;
+    // Couleur du compte à rebours : vert → orange → rouge
+    final Color timerColor = sLeft == null
+        ? AppColors.textMuted
+        : sLeft > 15
+            ? AppColors.success
+            : sLeft > 7
+                ? AppColors.warning
+                : AppColors.error;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: sLeft != null && sLeft <= 7
+              ? AppColors.error.withValues(alpha: 0.5)
+              : AppColors.border,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      ),
+      child: Column(
+        children: [
+          // Barre de progression du temps restant
+          if (sLeft != null)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(15)),
+              child: LinearProgressIndicator(
+                value: sLeft / kDispatchTimeoutSeconds,
+                minHeight: 4,
+                backgroundColor: AppColors.border,
+                color: timerColor,
+              ),
+            ),
+
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _icon(request.serviceTypeId),
-                  style: const TextStyle(fontSize: 24),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        request.serviceTypeName,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                Row(
+                  children: [
+                    Text(
+                      _icon(widget.request.serviceTypeId),
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.request.serviceTypeName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '${widget.request.distanceKm.toStringAsFixed(1)} km — '
+                            '${PriceCalculator.formatFcfa(widget.request.totalPrice)}',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        '${request.distanceKm.toStringAsFixed(1)} km — ${PriceCalculator.formatFcfa(request.totalPrice)}',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                    ),
+                    // Compte à rebours
+                    if (sLeft != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: timerColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '⏱ ${sLeft}s',
+                          style: TextStyle(
+                            color: timerColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.warningLight,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          '⏳ Nouvelle',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.warning),
+                        ),
+                      ),
+                  ],
+                ),
+
+                if (widget.request.userAddress != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined,
+                          size: 14, color: AppColors.textMuted),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          widget.request.userAddress!,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.warningLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    '⏳ Nouvelle',
-                    style: TextStyle(fontSize: 11, color: AppColors.warning),
-                  ),
-                ),
-              ],
-            ),
-            if (request.userAddress != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.location_on_outlined,
-                      size: 14, color: AppColors.textMuted),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      request.userAddress!,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
                 ],
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onDecline,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side: const BorderSide(color: AppColors.error),
-                      minimumSize: const Size(0, 40),
+
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: widget.onDecline,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: const BorderSide(
+                              color: AppColors.error),
+                          minimumSize: const Size(0, 40),
+                        ),
+                        child: const Text('Refuser'),
+                      ),
                     ),
-                    child: const Text('Refuser'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: onAccept,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, 40),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: widget.onAccept,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, 40),
+                        ),
+                        child: const Text('Accepter'),
+                      ),
                     ),
-                    child: const Text('Accepter'),
-                  ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 
   String _icon(String id) {
     const icons = {
-      'mechanic': '🔧',
-      'towing': '🚛',
-      'tire': '🔩',
+      'mechanic':   '🔧',
+      'towing':     '🚛',
+      'tire':       '🔩',
       'electrical': '⚡',
-      'battery': '🔋',
-      'fuel': '⛽',
-      'locksmith': '🔑',
-      'other': '🛠️',
+      'battery':    '🔋',
+      'fuel':       '⛽',
+      'locksmith':  '🔑',
+      'other':      '🛠️',
     };
     return icons[id] ?? '🛠️';
   }
