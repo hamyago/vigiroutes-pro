@@ -113,6 +113,19 @@ class ProviderController extends ChangeNotifier {
     await _loadInterventions();
     final newPendingIds = pendingRequests.map((r) => r.id).toSet();
 
+    // Commandes qui ont disparu de la liste pending (client a annulé, ou timeout)
+    final disappeared = previousPendingIds.difference(newPendingIds);
+    if (disappeared.isNotEmpty) {
+      for (final id in disappeared) {
+        _cancelDispatchTimer(id);
+        if (_pendingDispatch?.id == id) _pendingDispatch = null;
+      }
+      // Stopper l'alerte si plus aucune demande pending
+      if (newPendingIds.isEmpty) {
+        ProviderAlertService.instance.stop();
+      }
+    }
+
     // Ne déclencher l'alarme QUE pour une demande qui vient d'apparaître.
     final freshlyArrived = newPendingIds.difference(previousPendingIds);
     if (freshlyArrived.isNotEmpty) {
@@ -128,6 +141,7 @@ class ProviderController extends ChangeNotifier {
           address       : intervention.address,
           estimatedPrice: intervention.estimatedPrice?.toString(),
         );
+        _startDispatchTimer(id);
       }
     }
   }
@@ -238,9 +252,13 @@ class ProviderController extends ChangeNotifier {
         _myInterventions.insert(0, updated);
       }
 
-      // Effacer l'alerte si résolue
-      if (_pendingDispatch?.id == updated.id && !updated.isPending) {
-        _pendingDispatch = null;
+      // Effacer l'alerte si la commande n'est plus en attente
+      // (client annule, dispatch expiré, ou acceptée/refusée)
+      if (!updated.isPending) {
+        if (_pendingDispatch?.id == updated.id) {
+          _pendingDispatch = null;
+        }
+        _cancelDispatchTimer(updated.id);
         ProviderAlertService.instance.stop();
       }
       notifyListeners();
@@ -364,6 +382,24 @@ class ProviderController extends ChangeNotifier {
       debugPrint('[ProviderController] completeIntervention error: $e');
       FirebaseCrashlytics.instance.log('[ProviderController] completeIntervention error: $e');
       _actionError = 'Impossible de terminer l\'intervention. Réessayez.';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Annule une intervention déjà acceptée (le prestataire ne peut plus intervenir).
+  Future<bool> cancelIntervention(String id) async {
+    _actionError = null;
+    try {
+      await _api.cancelIntervention(id).timeout(const Duration(seconds: 30));
+      _myInterventions.removeWhere((i) => i.id == id);
+      _isAvailable = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[ProviderController] cancelIntervention error: $e');
+      FirebaseCrashlytics.instance.log('[ProviderController] cancelIntervention error: $e');
+      _actionError = 'Impossible d\'annuler cette intervention. Réessayez.';
       notifyListeners();
       return false;
     }
