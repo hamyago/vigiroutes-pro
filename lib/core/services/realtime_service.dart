@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Service WebSocket natif — compatible avec Laravel Reverb
@@ -41,6 +42,7 @@ class RealtimeService {
 
   final Map<String, StreamController<Map<String, dynamic>>> _controllers = {};
   final Map<String, Set<String>> _subscriptions = {};
+  final Set<String> _pendingSubscriptions = {};
   final Dio _authDio = Dio();
 
   bool get isConnected => _connected;
@@ -117,6 +119,12 @@ class RealtimeService {
         for (final channel in _subscriptions.keys) {
           _subscribeChannel(channel);
         }
+        // Traiter les canaux mis en attente (arrivés avant le handshake)
+        final pending = List<String>.from(_pendingSubscriptions);
+        _pendingSubscriptions.clear();
+        for (final channel in pending) {
+          _subscribeChannel(channel);
+        }
         return;
       }
 
@@ -176,6 +184,18 @@ class RealtimeService {
     }
   }
 
+  /// Relit le token Sanctum depuis SharedPreferences.
+  /// Garantit un token frais si le user s'est reconnecté.
+  Future<String?> _getFreshToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('sanctum_token') ?? _token;
+    } catch (e) {
+      debugPrint('[WS] Impossible de lire le token : $e');
+      return _token;
+    }
+  }
+
   // ── Souscription aux canaux privés ─────────────────────────────────────────
 
   Future<void> _subscribeChannel(String channel) async {
@@ -185,13 +205,16 @@ class RealtimeService {
     }
 
     if (_socketId == null) {
-      debugPrint('[WS] Abonnement à $channel différé (socket_id pas encore prêt)');
+      debugPrint('[WS] Abonnement à $channel mis en attente (socket_id pas prêt)');
+      _pendingSubscriptions.add(channel);
       return;
     }
 
-    final freshToken = _token;
+    // Rafraîchir le token à chaque abonnement (le user a pu se reconnecter)
+    final freshToken = await _getFreshToken();
     if (freshToken == null) {
-      debugPrint('[WS] Abonnement à $channel différé (aucun jeton)');
+      debugPrint('[WS] Abonnement à $channel mis en attente (aucun jeton)');
+      _pendingSubscriptions.add(channel);
       return;
     }
 
@@ -243,7 +266,11 @@ class RealtimeService {
     if (!_controllers.containsKey(key)) {
       _controllers[key] = StreamController<Map<String, dynamic>>.broadcast();
       _subscriptions.putIfAbsent(channel, () => {}).add(event);
-      if (_connected) _subscribeChannel(channel);
+      if (_connected && _socketId != null) {
+        _subscribeChannel(channel);
+      } else {
+        _pendingSubscriptions.add(channel);
+      }
     }
 
     return _controllers[key]!.stream;
@@ -260,6 +287,8 @@ class RealtimeService {
     }
     _controllers.clear();
     _subscriptions.clear();
+    _pendingSubscriptions.clear();
+    _socketId = null;
     _connected = false;
     _reconnectAttempts = 0;
     debugPrint('[WS] Déconnecté');
