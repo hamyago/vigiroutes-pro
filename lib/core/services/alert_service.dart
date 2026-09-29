@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -37,6 +38,17 @@ class ProviderAlertService {
     await _tts.speak(' ');
     await _tts.stop();
 
+    // ⚡ FIX timing : précharger le son de l'alarme pour éviter
+    // 3-5s de latence au premier dispatch (le fichier est en cache
+    // au lieu d'être chargé à la volée au moment critique).
+    try {
+      await _player.setReleaseMode(ReleaseMode.loop);
+      await _player.setSource(AssetSource('raw/alarm.wav'));
+      await _player.setVolume(1.0);
+    } catch (e) {
+      debugPrint('[Alert] Impossible de précharger alarm.wav : $e');
+    }
+
     _ttsReady = true;
   }
 
@@ -60,16 +72,21 @@ class ProviderAlertService {
     if (_ringingDispatchId == dispatchId) return;
     _ringingDispatchId = dispatchId;
 
-    // ── 1. Alarme sonore en boucle ────────────────────────────────────────
+    // ── 1. Alarme sonore en boucle (préchargée au boot) ───────────────────
     try {
       await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.play(AssetSource('raw/alarm.wav'));
+      // resume() : utilise la source préchargée → instantané
+      await _player.resume();
     } catch (_) {
-      // Fichier audio absent ou erreur → on continue quand même avec la voix.
+      // Fallback : charge à la volée si resume échoue
+      try {
+        await _player.play(AssetSource('raw/alarm.wav'));
+      } catch (_) {}
     }
 
     // ── 2. Annonce vocale détaillée (Option C) ────────────────────────────
-    await Future.delayed(const Duration(milliseconds: 800)); // laisse le son démarrer
+    // ⚡ FIX : 800ms → 300ms (l'alarme démarre déjà, pas besoin d'attendre autant)
+    await Future.delayed(const Duration(milliseconds: 300));
     await _speakDetails(
       clientName    : clientName,
       serviceType   : serviceType,
