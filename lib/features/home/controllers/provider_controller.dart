@@ -21,7 +21,7 @@ class ProviderController extends ChangeNotifier {
   ProviderModel?          _provider;
   List<InterventionModel> _myInterventions = [];
   InterventionModel?      _pendingDispatch;
-  List<ProviderAssistant> _assistants      = [];
+  final List<ProviderAssistant> _assistants = [];
   bool                    _isAvailable = true;
   bool                    _isLoading   = false;
   bool                    _initialized = false;
@@ -118,8 +118,10 @@ class ProviderController extends ChangeNotifier {
     final pending = pendingRequests;
     if (pending.isNotEmpty) {
       final first = pending.first;
-      // CORRECTION : le timer était manquant ici — sans lui, aucun auto-déclin
-      // n'était déclenché pour une demande trouvée au démarrage de l'app.
+      // FIX #2 : définir _pendingDispatch ici aussi (au cas où le WS n'est pas
+      // encore connecté au démarrage — l'app détecte la demande par API mais
+      // la modale ne s'affichait pas car _pendingDispatch restait null).
+      _pendingDispatch = first;
       _startDispatchTimer(first.id);
       ProviderAlertService.instance.newOrder(
         dispatchId    : first.id,
@@ -169,6 +171,9 @@ class ProviderController extends ChangeNotifier {
         final intervention = match.first;
         debugPrint(
             '[ProviderController] Nouvelle demande (polling): $id');
+        // FIX #2 : définir _pendingDispatch aussi via polling.
+        // Sinon si le WS est tombé, la modale ne s'affiche jamais.
+        _pendingDispatch = intervention;
         _startDispatchTimer(id);
         ProviderAlertService.instance.newOrder(
           dispatchId    : id,
@@ -177,6 +182,7 @@ class ProviderController extends ChangeNotifier {
           address       : intervention.address,
           estimatedPrice: intervention.estimatedPrice,
         );
+        notifyListeners();
       }
     }
   }
@@ -199,6 +205,9 @@ class ProviderController extends ChangeNotifier {
       debugPrint(
           '[ProviderController] FCM $type: $interventionId — $clientName');
 
+      // FIX #2 : définir _pendingDispatch via FCM aussi.
+      // On recharge les interventions pour récupérer l'objet complet,
+      // puis on met à jour _pendingDispatch avec le bon objet.
       _startDispatchTimer(interventionId);
       ProviderAlertService.instance.newOrder(
         dispatchId    : interventionId,
@@ -207,7 +216,14 @@ class ProviderController extends ChangeNotifier {
         address       : address,
         estimatedPrice: estimatedPrice,
       );
-      _loadInterventions();
+      // Recharge async — quand elle termine, on définit _pendingDispatch
+      _loadInterventions().then((_) {
+        final match = _myInterventions.where((i) => i.id == interventionId);
+        if (match.isNotEmpty) {
+          _pendingDispatch = match.first;
+          notifyListeners();
+        }
+      });
     });
   }
 
