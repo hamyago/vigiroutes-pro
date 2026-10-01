@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/realtime_service.dart';
@@ -255,6 +254,17 @@ class AuthController extends ChangeNotifier {
       if (data is Map) {
         _provider = ProviderModel.fromJson(Map<String, dynamic>.from(data));
         _state    = AuthState.authenticated;
+
+        // 🔧 FIX : Réinitialiser le WebSocket au démarrage.
+        try {
+          final token = await _api.getToken();
+          if (token != null && token.isNotEmpty) {
+            await RealtimeService.instance.init(token);
+            debugPrint('[ProviderAuth] RealtimeService.init au démarrage OK');
+          }
+        } catch (e) {
+          debugPrint('[ProviderAuth] RealtimeService.init au démarrage non-fatal: $e');
+        }
       } else {
         // Réponse inattendue mais pas une erreur réseau → on garde l'état actuel
         if (_state == AuthState.unknown) _state = AuthState.unauthenticated;

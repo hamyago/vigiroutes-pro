@@ -68,6 +68,11 @@ class ApiService {
   Future<bool> get hasToken async =>
       ((await SharedPreferences.getInstance()).getString('sanctum_token')) != null;
 
+  /// Retourne le token Sanctum stocké, ou null s'il n'existe pas.
+  /// Utilisé pour réinitialiser le WebSocket au démarrage de l'app.
+  Future<String?> getToken() async =>
+      (await SharedPreferences.getInstance()).getString('sanctum_token');
+
   Future<Response> get(String path, {Map<String, dynamic>? params}) =>
       _dio.get(path, queryParameters: params);
 

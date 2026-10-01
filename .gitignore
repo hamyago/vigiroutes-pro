@@ -49,3 +49,5 @@ android/build/
 android/app/build/
 android/build/
 build/
+*.bak-*
+*.bak-*
