@@ -473,12 +473,27 @@ class ProviderController extends ChangeNotifier {
           .timeout(const Duration(seconds: 30));
       _myInterventions.removeWhere((i) => i.id == id);
       _isAvailable = true;
+      _cancelDispatchTimer(id);
       notifyListeners();
       return true;
     } catch (e) {
       debugPrint('[ProviderController] cancelIntervention error: $e');
       FirebaseCrashlytics.instance
           .log('[ProviderController] cancelIntervention error: $e');
+
+      // ─── GESTION DU 404 "DÉJÀ ANNULÉ" ─────────────────────────────────
+      // Si l'intervention a déjà été annulée côté backend (le client l'a
+      // fait avant nous), le serveur renvoie 404. Ce n'est PAS une erreur :
+      // le résultat attendu est atteint. On traite donc comme un succès et
+      // on remet le prestataire en ligne.
+      if (e is DioException && e.response?.statusCode == 404) {
+        debugPrint('[ProviderController] cancel 404 — déjà annulé, OK');
+        _myInterventions.removeWhere((i) => i.id == id);
+        _isAvailable = true;
+        _cancelDispatchTimer(id);
+        notifyListeners();
+        return true;
+      }
 
       // Extraire le message backend réel (DioException avec response)
       String msg = 'Impossible d\'annuler cette intervention. Réessayez.';
@@ -490,10 +505,6 @@ class ProviderController extends ChangeNotifier {
           if (backendMsg != null && backendMsg.toString().trim().isNotEmpty) {
             msg = backendMsg.toString();
           }
-        }
-        // 404 = route absente côté backend
-        if (e.response?.statusCode == 404) {
-          msg = 'Route d\'annulation introuvable (404). Vérifier le backend.';
         }
       }
 
